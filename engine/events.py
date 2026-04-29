@@ -76,7 +76,8 @@ class CrisisEventLibrary:
         eligible = [e for e in self._events if e["min_tension"] <= tension_level]
         if not eligible:
             return []
-        count = 1 if random.random() < 0.6 else (2 if tension_level > 0.5 else 0)
+        weights = [0.2, 0.5, 0.3] if tension_level > 0.5 else [0.4, 0.5, 0.1]
+        count = random.choices([0, 1, 2], weights=weights)[0]
         selected = random.sample(eligible, min(count, len(eligible)))
         return [
             CrisisEvent(
