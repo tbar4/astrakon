@@ -9,9 +9,8 @@ persona:
     commercial: 0.00
     influence_ops: 0.10
     education: 0.00
-    covert: 0.50
+    covert: 0.80
     diplomacy: 0.00
-    kinetic_asat_implicit: 0.30
   decision_style: chaos_maximizing
   escalation_tolerance: 1.0
   doctrine_narrative: >
