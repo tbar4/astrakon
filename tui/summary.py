@@ -113,6 +113,8 @@ class TurnSummary:
 
         for d in self.decisions:
             fid = d["faction_id"]
+            if fid not in self.faction_states:
+                continue  # stale row from a previous game session
             name = self.faction_states[fid].name
             data = json.loads(d["decision_json"])
 
