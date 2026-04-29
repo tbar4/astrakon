@@ -1,0 +1,54 @@
+import pytest
+from engine.state import (
+    Phase, InvestmentAllocation, OperationalAction, ResponseDecision,
+    Decision, FactionAssets, FactionState, CoalitionState,
+    GameStateSnapshot, CrisisEvent, Recommendation,
+)
+
+
+def test_investment_allocation_sums_to_one():
+    alloc = InvestmentAllocation(
+        r_and_d=0.30, constellation=0.20, launch_capacity=0.10,
+        commercial=0.10, influence_ops=0.10, education=0.10,
+        covert=0.05, diplomacy=0.05, rationale="test"
+    )
+    assert abs(alloc.total() - 1.0) < 0.001
+
+
+def test_investment_allocation_rejects_over_budget():
+    with pytest.raises(ValueError):
+        InvestmentAllocation(
+            r_and_d=0.60, constellation=0.60,
+            rationale="too much"
+        )
+
+
+def test_faction_assets_default_empty():
+    assets = FactionAssets()
+    assert assets.leo_nodes == 0
+    assert assets.sda_sensors == 0
+
+
+def test_decision_invest_phase():
+    alloc = InvestmentAllocation(
+        r_and_d=0.50, constellation=0.50, rationale="test"
+    )
+    decision = Decision(phase=Phase.INVEST, faction_id="ussf", investment=alloc)
+    assert decision.phase == Phase.INVEST
+    assert decision.investment.r_and_d == 0.50
+
+
+def test_game_state_snapshot_serializes():
+    snapshot = GameStateSnapshot(
+        turn=1, phase=Phase.INVEST, faction_id="ussf",
+        faction_state=FactionState(
+            faction_id="ussf", name="US Space Force",
+            budget_per_turn=100, current_budget=100,
+            assets=FactionAssets()
+        ),
+        ally_states={}, adversary_estimates={}, coalition_states={},
+        available_actions=["allocate_budget"],
+    )
+    data = snapshot.model_dump()
+    assert data["turn"] == 1
+    assert data["faction_id"] == "ussf"
