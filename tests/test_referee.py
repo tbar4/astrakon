@@ -1,7 +1,8 @@
 import pytest
 from pathlib import Path
 from engine.referee import GameReferee
-from engine.state import Phase
+from engine.state import Phase, Decision
+from agents.base import AgentInterface
 from agents.rule_based import MahanianAgent, MaxConstellationAgent
 from scenarios.loader import load_scenario, Faction
 from engine.state import FactionAssets
@@ -65,3 +66,26 @@ async def test_referee_checks_victory_conditions(scenario, audit):
     result = await referee.run()
     assert result is not None
     assert hasattr(result, "winner_coalition")
+
+
+async def test_fallback_agent_on_exception(scenario, audit):
+    """When an agent raises on submit_decision, referee falls back to MahanianAgent."""
+    class FailingAgent(AgentInterface):
+        async def submit_decision(self, phase: Phase) -> Decision:
+            raise RuntimeError("simulated agent failure")
+
+    scenario.turns = 1
+    agents = {}
+    for faction in scenario.factions:
+        agent = FailingAgent() if faction.faction_id == "ussf" else MahanianAgent()
+        agent.initialize(faction)
+        agents[faction.faction_id] = agent
+
+    referee = GameReferee(scenario=scenario, agents=agents, audit=audit)
+    result = await referee.run()
+
+    assert result.turns_completed == 1
+
+    decisions = await audit.get_decisions(turn=1)
+    ussf_decisions = [d for d in decisions if d["faction_id"] == "ussf"]
+    assert len(ussf_decisions) > 0
