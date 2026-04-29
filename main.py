@@ -232,8 +232,9 @@ async def main():
             aar_text = await aar_gen.generate(audit=audit, scenario_name=scenario.name)
             winner_slug = result.winner_coalition.replace(" ", "_").lower() if result.winner_coalition else "draw"
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            aar_dir = Path("output") / "aar"
-            aar_dir.mkdir(exist_ok=True)
+            scenario_slug = scenario.name.replace(" ", "_").lower()
+            aar_dir = Path("output") / "aar" / scenario_slug
+            aar_dir.mkdir(parents=True, exist_ok=True)
             aar_path = aar_dir / f"{timestamp}_{winner_slug}.md"
             aar_path.write_text(aar_text)
             console.print(f"[green]AAR saved to {aar_path}[/green]")
