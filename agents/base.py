@@ -23,7 +23,7 @@ class AgentInterface(ABC):
         self._last_snapshot = snapshot
 
     def receive_event(self, event: CrisisEvent) -> None:
-        pass  # override in subclasses that need event handling
+        pass
 
     @abstractmethod
     async def submit_decision(self, phase: Phase) -> Decision:

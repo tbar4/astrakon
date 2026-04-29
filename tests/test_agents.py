@@ -15,13 +15,13 @@ class ConcreteAgent(AgentInterface):
 
 
 def test_agent_interface_requires_submit_decision():
-    from abc import ABC
-    assert issubclass(AgentInterface, ABC)
+    with pytest.raises(TypeError):
+        AgentInterface()
 
 
 async def test_concrete_agent_submit_decision():
     from engine.state import FactionState, FactionAssets
-    from scenarios.loader import Faction, Scenario, VictoryConditions
+    from scenarios.loader import Faction
     agent = ConcreteAgent()
     faction = Faction(
         faction_id="ussf", name="US Space Force", archetype="mahanian",
