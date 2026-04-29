@@ -25,20 +25,23 @@ class InvestmentResolver:
         self, faction_id: str, budget: int,
         allocation: InvestmentAllocation, turn: int
     ) -> InvestmentResult:
-        immediate = FactionAssets()
         deferred = []
         spent = 0
+        leo_nodes = 0
+        launch_capacity = 0
+        asat_deniable = 0
+        ew_jammers = 0
 
         if allocation.constellation > 0:
             pts = int(budget * allocation.constellation)
             nodes = pts // self.CONSTELLATION_NODE_COST
-            immediate.leo_nodes = nodes
+            leo_nodes += nodes
             spent += nodes * self.CONSTELLATION_NODE_COST
 
         if allocation.launch_capacity > 0:
             pts = int(budget * allocation.launch_capacity)
             capacity = pts // self.LAUNCH_CAPACITY_COST
-            immediate.launch_capacity = capacity
+            launch_capacity += capacity
             spent += capacity * self.LAUNCH_CAPACITY_COST
 
         if allocation.r_and_d > 0:
@@ -64,15 +67,21 @@ class InvestmentResolver:
         if allocation.covert > 0:
             pts = int(budget * allocation.covert)
             asat = pts // self.ASAT_DENIABLE_COST
-            immediate.asat_deniable = asat
+            asat_deniable += asat
             spent += asat * self.ASAT_DENIABLE_COST
 
         if allocation.influence_ops > 0:
             pts = int(budget * allocation.influence_ops)
             jammers = pts // self.EW_JAMMER_COST
-            immediate.ew_jammers = jammers
+            ew_jammers += jammers
             spent += jammers * self.EW_JAMMER_COST
 
+        immediate = FactionAssets(
+            leo_nodes=leo_nodes,
+            launch_capacity=launch_capacity,
+            asat_deniable=asat_deniable,
+            ew_jammers=ew_jammers,
+        )
         return InvestmentResult(
             immediate_assets=immediate,
             deferred_returns=deferred,
@@ -84,15 +93,22 @@ class SDAFilter:
     def filter(
         self, adversary_assets: FactionAssets, observer_sda_level: float
     ) -> FactionAssets:
-        visible = FactionAssets()
-        visible.leo_nodes = int(adversary_assets.leo_nodes * min(observer_sda_level + 0.3, 1.0))
-        visible.geo_nodes = int(adversary_assets.geo_nodes * min(observer_sda_level + 0.4, 1.0))
+        leo_nodes = int(adversary_assets.leo_nodes * min(observer_sda_level + 0.3, 1.0))
+        geo_nodes = int(adversary_assets.geo_nodes * min(observer_sda_level + 0.4, 1.0))
+        asat_kinetic = 0
+        asat_deniable = 0
         if observer_sda_level >= 0.3:
-            visible.asat_kinetic = int(adversary_assets.asat_kinetic * observer_sda_level)
+            asat_kinetic = int(adversary_assets.asat_kinetic * observer_sda_level)
         if observer_sda_level >= 0.6:
-            visible.asat_deniable = int(adversary_assets.asat_deniable * (observer_sda_level - 0.5))
-        visible.ew_jammers = int(adversary_assets.ew_jammers * observer_sda_level)
-        return visible
+            asat_deniable = round(adversary_assets.asat_deniable * (observer_sda_level - 0.5))
+        ew_jammers = int(adversary_assets.ew_jammers * observer_sda_level)
+        return FactionAssets(
+            leo_nodes=leo_nodes,
+            geo_nodes=geo_nodes,
+            asat_kinetic=asat_kinetic,
+            asat_deniable=asat_deniable,
+            ew_jammers=ew_jammers,
+        )
 
 
 class ConflictResolver:
@@ -136,6 +152,8 @@ class SimulationEngine:
     ) -> float:
         total_nodes = sum(a.total_orbital_nodes() for a in all_assets.values())
         if total_nodes == 0:
+            return 0.0
+        if faction_id not in all_assets:
             return 0.0
         return all_assets[faction_id].total_orbital_nodes() / total_nodes
 
