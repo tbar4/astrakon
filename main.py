@@ -151,8 +151,10 @@ async def main():
     from output.strategy_lib import StrategyLibrary
     from engine.referee import GameReferee
 
+    from datetime import datetime
     Path("output").mkdir(exist_ok=True)
-    audit = AuditTrail("output/game_audit.db")
+    _session_ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    audit = AuditTrail(f"output/game_audit_{_session_ts}.db")
     await audit.initialize()
 
     try:
