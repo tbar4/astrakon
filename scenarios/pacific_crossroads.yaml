@@ -1,0 +1,87 @@
+name: "Pacific Crossroads"
+description: "Great power competition over Taiwan Strait, 2030"
+turns: 15
+turn_represents: "2 months"
+
+coalitions:
+  blue:
+    member_ids: [ussf, nexus_corp]
+    shared_intel: true
+    hegemony_pool: true
+  red:
+    member_ids: [pla_ssf, russia_vks]
+    shared_intel: true
+    hegemony_pool: true
+
+factions:
+  - faction_id: ussf
+    name: "US Space Force"
+    archetype: mahanian
+    agent_type: "human+advisor"
+    budget_per_turn: 100
+    coalition_id: blue
+    coalition_loyalty: 0.9
+    starting_assets:
+      leo_nodes: 48
+      geo_nodes: 6
+      sda_sensors: 12
+      relay_nodes: 4
+      launch_capacity: 3
+
+  - faction_id: nexus_corp
+    name: "Nexus Aerospace"
+    archetype: commercial_broker
+    agent_type: ai_commander
+    budget_per_turn: 75
+    coalition_id: blue
+    coalition_loyalty: 0.6
+    starting_assets:
+      leo_nodes: 120
+      geo_nodes: 2
+      sda_sensors: 6
+      launch_capacity: 5
+
+  - faction_id: pla_ssf
+    name: "PLA Strategic Support Force"
+    archetype: gray_zone
+    agent_type: ai_commander
+    budget_per_turn: 90
+    coalition_id: red
+    coalition_loyalty: 0.85
+    starting_assets:
+      leo_nodes: 40
+      geo_nodes: 4
+      asat_kinetic: 6
+      asat_deniable: 4
+      sda_sensors: 8
+      launch_capacity: 3
+
+  - faction_id: russia_vks
+    name: "VKS Space Forces"
+    archetype: rogue_accelerationist
+    agent_type: ai_commander
+    budget_per_turn: 40
+    coalition_id: red
+    coalition_loyalty: 0.7
+    starting_assets:
+      leo_nodes: 15
+      asat_kinetic: 8
+      ew_jammers: 6
+      sda_sensors: 4
+      launch_capacity: 2
+
+victory:
+  coalition_orbital_dominance: 0.65
+  individual_conditions_required: true
+  individual_conditions:
+    ussf:
+      military_deterrence_score: 75
+    nexus_corp:
+      commercial_market_share: 0.5
+    pla_ssf:
+      orbital_dominance_score: 0.65
+    russia_vks:
+      disruption_score: 60
+
+crisis_events:
+  library: default_2030
