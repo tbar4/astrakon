@@ -86,10 +86,10 @@ class GameReferee:
             for r in due:
                 if r["category"] == "r_and_d":
                     tech_level = fs.tech_tree.get("r_and_d", 0)
-                    fs.tech_tree["r_and_d"] = tech_level + max(1, r["amount"] // 20)
+                    fs.tech_tree["r_and_d"] = tech_level + r["amount"] // 20
                 elif r["category"] == "education":
                     edu_level = fs.tech_tree.get("education", 0)
-                    fs.tech_tree["education"] = edu_level + max(1, r["amount"] // 30)
+                    fs.tech_tree["education"] = edu_level + r["amount"] // 30
                 else:
                     raise ValueError(f"Unknown deferred return category: {r['category']}")
             fs.deferred_returns = [
@@ -120,7 +120,7 @@ class GameReferee:
             faction_state=fs.model_copy(deep=True),
             ally_states=ally_states,
             adversary_estimates=adversary_estimates,
-            coalition_states=self.coalition_states,
+            coalition_states={cid: c.model_copy(deep=True) for cid, c in self.coalition_states.items()},
             available_actions=available_actions,
         )
 

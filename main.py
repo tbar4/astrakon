@@ -10,7 +10,7 @@ console = Console()
 
 
 def _select_scenario() -> Path:
-    scenario_dir = Path("scenarios")
+    scenario_dir = Path(__file__).resolve().parent / "scenarios"
     scenarios = list(scenario_dir.glob("*.yaml"))
     if not scenarios:
         console.print("[red]No scenario files found in scenarios/[/red]")
