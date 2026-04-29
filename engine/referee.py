@@ -87,6 +87,11 @@ class GameReferee:
                 if r["category"] == "r_and_d":
                     tech_level = fs.tech_tree.get("r_and_d", 0)
                     fs.tech_tree["r_and_d"] = tech_level + max(1, r["amount"] // 20)
+                elif r["category"] == "education":
+                    edu_level = fs.tech_tree.get("education", 0)
+                    fs.tech_tree["education"] = edu_level + max(1, r["amount"] // 30)
+                else:
+                    raise ValueError(f"Unknown deferred return category: {r['category']}")
             fs.deferred_returns = [
                 r for r in fs.deferred_returns if r["turn_due"] > turn
             ]
@@ -102,7 +107,7 @@ class GameReferee:
             if fid == faction_id:
                 continue
             if other_fs.coalition_id == coalition_id:
-                ally_states[fid] = other_fs
+                ally_states[fid] = other_fs.model_copy(deep=True)
             else:
                 adversary_estimates[fid] = self.sim.sda_filter.filter(
                     adversary_assets=other_fs.assets,
@@ -112,7 +117,7 @@ class GameReferee:
             turn=self._current_turn,
             phase=phase,
             faction_id=faction_id,
-            faction_state=fs,
+            faction_state=fs.model_copy(deep=True),
             ally_states=ally_states,
             adversary_estimates=adversary_estimates,
             coalition_states=self.coalition_states,
@@ -135,13 +140,16 @@ class GameReferee:
         for fid, result in zip(tasks.keys(), results):
             if isinstance(result, Exception):
                 from agents.rule_based import MahanianAgent
-                fallback = MahanianAgent()
-                fallback.initialize(
-                    next(f for f in self.scenario.factions if f.faction_id == fid)
-                )
-                snapshot = self._build_snapshot(fid, phase, available_actions)
-                fallback.receive_state(snapshot)
-                decisions[fid] = await fallback.submit_decision(phase)
+                try:
+                    fallback = MahanianAgent()
+                    fallback.initialize(
+                        next(f for f in self.scenario.factions if f.faction_id == fid)
+                    )
+                    snapshot = self._build_snapshot(fid, phase, available_actions)
+                    fallback.receive_state(snapshot)
+                    decisions[fid] = await fallback.submit_decision(phase)
+                except Exception:
+                    continue  # skip this faction's decision for the turn
             else:
                 decisions[fid] = result
         return decisions
@@ -163,6 +171,7 @@ class GameReferee:
                 if result.immediate_assets.launch_capacity:
                     fs.assets.launch_capacity += result.immediate_assets.launch_capacity
                 fs.deferred_returns.extend(result.deferred_returns)
+                # TODO: decrement fs.current_budget by result.budget_spent for cross-phase accounting
             await self.audit.write_decision(turn=turn, decision=decision)
 
     async def _run_operations_phase(self, turn: int):
@@ -171,6 +180,7 @@ class GameReferee:
             ["task_assets", "coordinate", "gray_zone", "alliance_move", "signal"]
         )
         for fid, decision in decisions.items():
+            # TODO: resolve operational actions via ConflictResolver (post-POC)
             await self.audit.write_decision(turn=turn, decision=decision)
 
     async def _run_response_phase(self, turn: int):
@@ -197,6 +207,8 @@ class GameReferee:
             await self.audit.write_decision(turn=turn, decision=decision)
 
     def _check_victory(self) -> Optional[str]:
+        if self._current_turn < 2:
+            return None
         all_assets = {fid: fs.assets for fid, fs in self.faction_states.items()}
         for cid, coalition in self.coalition_states.items():
             dominance = self.sim.compute_coalition_dominance(
