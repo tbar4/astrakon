@@ -43,17 +43,21 @@ class Scenario(BaseModel):
 def load_scenario(path: Path) -> Scenario:
     yaml = YAML()
     raw = yaml.load(path)
-    factions = [Faction(**f) for f in raw.get("factions", [])]
+    try:
+        name = raw["name"]
+        turns = raw["turns"]
+    except KeyError as e:
+        raise ValueError(f"Scenario file {path} is missing required field: {e}") from e
+    factions = [Faction.model_validate(dict(f)) for f in raw.get("factions", [])]
     coalitions = {
-        k: Coalition(**v)
+        k: Coalition.model_validate(dict(v))
         for k, v in raw.get("coalitions", {}).items()
     }
-    victory_raw = raw.get("victory", {})
-    victory = VictoryConditions(**victory_raw)
+    victory = VictoryConditions.model_validate(dict(raw.get("victory", {})))
     return Scenario(
-        name=raw["name"],
+        name=name,
         description=raw.get("description", ""),
-        turns=raw["turns"],
+        turns=turns,
         turn_represents=raw.get("turn_represents", "1 month"),
         factions=factions,
         coalitions=coalitions,
