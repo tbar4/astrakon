@@ -119,6 +119,9 @@ def display_recommendation(rec: Recommendation, phase: Phase) -> None:
             content.append("  Stand down — de-escalate", style="green")
         content.append("\n")
 
+    else:
+        content.append("  [dim]No structured recommendation available.[/dim]\n")
+
     content.append(f"\n  {rec.strategic_rationale}", style="dim")
     console.print(Panel(
         content,
