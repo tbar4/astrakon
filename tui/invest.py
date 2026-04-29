@@ -81,7 +81,7 @@ def _render_table(allocations: dict[str, float], budget: int) -> Table:
         show_header=True, header_style="bold", box=None, padding=(0, 2),
         title=f"Investment Allocation — {budget} pts budget",
     )
-    table.add_column("#", justify="right", style="dim", width=3)
+    table.add_column("#", justify="right", style="bold", width=3)
     table.add_column("Category", min_width=22)
     table.add_column("Alloc", justify="right", width=7)
     table.add_column("Pts", justify="right", width=5)
