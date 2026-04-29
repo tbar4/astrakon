@@ -12,9 +12,7 @@ class InvestmentResult:
 
 class InvestmentResolver:
     CONSTELLATION_NODE_COST = 5
-    SDA_SENSOR_COST = 8
     LAUNCH_CAPACITY_COST = 15
-    ASAT_KINETIC_COST = 20
     ASAT_DENIABLE_COST = 25
     EW_JAMMER_COST = 12
 
