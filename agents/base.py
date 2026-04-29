@@ -10,6 +10,8 @@ if TYPE_CHECKING:
 
 
 class AgentInterface(ABC):
+    is_human: bool = False
+
     def __init__(self):
         self.faction_id: str = ""
         self.faction_name: str = ""

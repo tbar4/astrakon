@@ -124,34 +124,53 @@ class GameReferee:
             available_actions=available_actions,
         )
 
+    async def _fallback_decision(
+        self, fid: str, phase: Phase, available_actions: list[str]
+    ) -> Decision | None:
+        from agents.rule_based import MahanianAgent
+        try:
+            fallback = MahanianAgent()
+            fallback.initialize(next(f for f in self.scenario.factions if f.faction_id == fid))
+            fallback.receive_state(self._build_snapshot(fid, phase, available_actions))
+            return await fallback.submit_decision(phase)
+        except Exception:
+            return None
+
     async def _collect_decisions(
         self, phase: Phase, available_actions: list[str]
     ) -> dict[str, Decision]:
-        for faction_id, agent in self.agents.items():
-            snapshot = self._build_snapshot(faction_id, phase, available_actions)
-            agent.receive_state(snapshot)
+        from rich.console import Console
+        _console = Console()
 
-        tasks = {
-            fid: agent.submit_decision(phase)
-            for fid, agent in self.agents.items()
-        }
-        results = await asyncio.gather(*tasks.values(), return_exceptions=True)
+        for faction_id, agent in self.agents.items():
+            agent.receive_state(self._build_snapshot(faction_id, phase, available_actions))
+
         decisions = {}
-        for fid, result in zip(tasks.keys(), results):
-            if isinstance(result, Exception):
-                from agents.rule_based import MahanianAgent
+
+        # Human agents first — interactive, no spinner
+        for fid, agent in self.agents.items():
+            if agent.is_human:
                 try:
-                    fallback = MahanianAgent()
-                    fallback.initialize(
-                        next(f for f in self.scenario.factions if f.faction_id == fid)
-                    )
-                    snapshot = self._build_snapshot(fid, phase, available_actions)
-                    fallback.receive_state(snapshot)
-                    decisions[fid] = await fallback.submit_decision(phase)
+                    decisions[fid] = await agent.submit_decision(phase)
                 except Exception:
-                    continue  # skip this faction's decision for the turn
-            else:
-                decisions[fid] = result
+                    result = await self._fallback_decision(fid, phase, available_actions)
+                    if result is not None:
+                        decisions[fid] = result
+
+        # AI agents concurrently — show spinner while waiting on API calls
+        ai_agents = {fid: agent for fid, agent in self.agents.items() if not agent.is_human}
+        if ai_agents:
+            ai_tasks = {fid: agent.submit_decision(phase) for fid, agent in ai_agents.items()}
+            with _console.status(f"[dim]AI commanders deliberating ({phase.value} phase)...[/dim]"):
+                results = await asyncio.gather(*ai_tasks.values(), return_exceptions=True)
+            for fid, result in zip(ai_tasks.keys(), results):
+                if isinstance(result, Exception):
+                    decision = await self._fallback_decision(fid, phase, available_actions)
+                    if decision is not None:
+                        decisions[fid] = decision
+                else:
+                    decisions[fid] = result
+
         return decisions
 
     async def _run_investment_phase(self, turn: int):

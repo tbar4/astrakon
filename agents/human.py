@@ -146,6 +146,8 @@ def _collect_response() -> ResponseDecision:
 
 
 class HumanAgent(AgentInterface):
+    is_human: bool = True
+
     def __init__(self, advisor: Optional[AgentInterface] = None):
         super().__init__()
         self._advisor = advisor
