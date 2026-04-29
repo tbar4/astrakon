@@ -87,9 +87,25 @@ def _collect_investment() -> InvestmentAllocation:
     return InvestmentAllocation(**values, rationale=rationale)
 
 
+_OPS_DESCRIPTIONS = {
+    "task_assets":    "Direct your satellites/ASATs to a specific mission (surveillance, patrol, intercept)",
+    "coordinate":     "Synchronize operations with a coalition ally this turn",
+    "gray_zone":      "Conduct deniable activity — jamming, spoofing, or proximity ops below threshold",
+    "alliance_move":  "Diplomatic-military signal: reinforce a partner, extend deterrence, or shift alignment",
+    "signal":         "Deliberate public or back-channel communication to shape adversary expectations",
+}
+
+
 def _collect_operations() -> list[OperationalAction]:
-    console.print("\n[bold]OPERATIONS PHASE[/bold]")
-    actions = ["task_assets", "coordinate", "gray_zone", "alliance_move", "signal"]
+    menu = Table(title="Operational Actions", show_header=True, header_style="bold")
+    menu.add_column("Action")
+    menu.add_column("What it does")
+    for action, desc in _OPS_DESCRIPTIONS.items():
+        menu.add_row(action, desc)
+    console.print(menu)
+    console.print("\n[bold]OPERATIONS PHASE[/bold]\n")
+
+    actions = list(_OPS_DESCRIPTIONS.keys())
     action_type = Prompt.ask("Action type", choices=actions, default="task_assets")
     target = Prompt.ask("Target faction (leave blank for none)", default="")
     rationale = Prompt.ask("Rationale")
