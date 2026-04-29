@@ -29,7 +29,7 @@ def _select_scenario() -> Path:
     return scenarios[choice]
 
 
-def _configure_agents(scenario, persona_dir: Path = Path("personas")) -> dict:
+def _configure_agents(scenario, persona_dir: Path = Path("personas"), header=None) -> dict:
     from agents.rule_based import MahanianAgent
     from agents.ai_commander import AICommanderAgent
     from agents.human import HumanAgent
@@ -61,7 +61,7 @@ def _configure_agents(scenario, persona_dir: Path = Path("personas")) -> dict:
                 yaml.dump(archetype_data, buf)
                 advisor = AICommanderAgent(persona_yaml=buf.getvalue())
                 advisor.initialize(faction)
-            agent = HumanAgent(advisor=advisor)
+            agent = HumanAgent(advisor=advisor, header=header)
         else:  # ai_commander
             yaml = YAML()
             buf = io.StringIO()
@@ -142,7 +142,10 @@ async def main():
     console.print(f"\nLoaded: [bold]{scenario.name}[/bold] ({scenario.turns} turns)")
     console.print(f"  {scenario.description}")
 
-    agents = _configure_agents(scenario)
+    from tui.header import GameHeader
+    header = GameHeader(scenario.name, scenario.turns)
+
+    agents = _configure_agents(scenario, header=header)
 
     from output.audit import AuditTrail
     from output.strategy_lib import StrategyLibrary
@@ -153,7 +156,7 @@ async def main():
     await audit.initialize()
 
     try:
-        referee = GameReferee(scenario=scenario, agents=agents, audit=audit)
+        referee = GameReferee(scenario=scenario, agents=agents, audit=audit, header=header)
 
         console.print("\n[bold green]Starting game...[/bold green]\n")
         result = await referee.run()
