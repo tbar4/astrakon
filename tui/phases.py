@@ -46,7 +46,7 @@ def display_situation(snapshot: GameStateSnapshot) -> None:
         f"  Budget: [green]{fs.current_budget}[/green] pts  │  "
         f"Deterrence: [cyan]{fs.deterrence_score:.0f}[/cyan]  │  "
         f"Mkt Share: [cyan]{fs.market_share:.1%}[/cyan]  │  "
-        f"JFE: [{jfe_color}]{jfe:.0%}[/{jfe_color}]"
+        f"Joint Force Effectiveness: [{jfe_color}]{jfe:.0%}[/{jfe_color}]"
     )
 
     # Adversary estimates (expanded — MEO/GEO/cislunar columns)

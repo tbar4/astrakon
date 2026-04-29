@@ -192,7 +192,7 @@ class TurnSummary:
         table.add_column("Deterrence", justify="right")
         table.add_column("Disruption", justify="right")
         table.add_column("Mkt Share", justify="right")
-        table.add_column("JFE", justify="right")
+        table.add_column("Joint Force Effectiveness", justify="right")
         for fid, fs in self.faction_states.items():
             jfe = fs.joint_force_effectiveness
             jfe_color = "green" if jfe >= 0.8 else ("yellow" if jfe >= 0.5 else "red")
