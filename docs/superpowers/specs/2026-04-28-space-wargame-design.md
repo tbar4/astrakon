@@ -16,9 +16,15 @@ The design priority is **educational realism over entertainment**. Every game se
 
 Whoever builds the most capable distributed AI network in space wins global hegemony. The game tests that thesis by letting players discover which investment strategies, doctrines, and coalition structures produce dominance — and which fail.
 
-### Domain Analogy
+### Theoretical Foundation
 
-Space operates closest to **submarine and naval strategy**: contested commons, limited direct observation, critical chokepoints (orbital shells as sea lanes), and an intelligence premium that rivals raw firepower. Dolman's *Astropolitik* — control of critical orbital nodes → control of cislunar space → control of Earth approach — is the structural theory underpinning the victory conditions.
+This game is built on a deliberate tension between two schools of spacepower theory, and which school dominates shapes what "winning" means.
+
+**Dolman / Astropolitik (brown-water, near-term POC framing):** Treats space as the ultimate high ground above Earth. Strategic logic terminates at Earth's surface — control the orbital nodes, dominate the approach, leverage orbital position for terrestrial power. The "ultimate high ground" metaphor reveals its limit: it is still a terrestrial framing. Space is an instrument of Earth hegemony, not a domain with its own strategic depth. This is the framework closest to where current US-China great power competition actually is — LEO/GEO dominance, SDA, ASAT competition, commercial constellation as dual-use asset. The POC uses Dolman-adjacent mechanics and victory conditions because they model the near-term competitive environment.
+
+**Ziarnick / Carlson (blue-water, target framework for future iterations):** Rejects the terrestrial ceiling. Space is the *wine dark sea* — an open domain with no visible horizon, strategic depth extending into cislunar space and beyond. Whoever commands it can project force and protect commerce anywhere, not just dominate the coastline below. The commercial and logistical dimensions are co-equal with military power, just as maritime commerce was the actual strategic weight behind Mahanian sea power. Cislunar transit lanes, lunar resource competition, and eventually interplanetary logistics are the space equivalents of ocean commerce routes — the things worth commanding a navy to protect. Later iterations of this engine should implement these mechanics: space lines of communication (SLOC) control, cislunar maneuver advantage, resource projection beyond orbital shells, and commercial space power as a first-class strategic variable — not a modifier on a military outcome.
+
+The POC is honest about this limitation. Orbital node control is a Dolman-era approximation. The engine's architecture is designed to support Ziarnick/Carlson mechanics as an expansion — the scenario config system, faction definitions, and victory condition schema are all extensible without engine changes.
 
 ---
 
@@ -339,6 +345,9 @@ factions:
     budget_per_turn: 40
 
 victory:
+  # POC: Dolman-adjacent metric — orbital node control as proxy for space dominance
+  # Future: replace/extend with Ziarnick/Carlson SLOC control, cislunar maneuver
+  # advantage, commercial space power index, and resource projection metrics
   coalition_orbital_dominance: 0.65   # control 65% of critical orbital nodes
   individual_conditions_required: true
 
@@ -467,3 +476,20 @@ Phase 2 enables 1,000+ AI vs. AI simulation runs in parallel — the strategy li
 - Multiplayer networking (all agents run locally in POC)
 - Full orbital mechanics simulation (simplified orbital shell model, not Keplerian)
 - Classified data integration
+
+## Named Future Iterations
+
+**Iteration 2 — Blue Water Expansion (Ziarnick / Carlson framework)**
+Extend beyond Dolman's Earth-centric orbital node control into the wine dark sea:
+- Cislunar space as a strategic theater with its own maneuver mechanics
+- Space lines of communication (SLOC) as victory condition dimensions
+- Lunar resource competition and projection logistics
+- Commercial space power as a co-equal strategic variable (not a military modifier)
+- Maneuver advantage over positional control — speed and depth, not chokepoints
+- Economic coercion mechanics through space infrastructure dependency
+
+**Iteration 3 — Rust Engine Core**
+Port `engine/` to Rust for parallel AI vs. AI simulation at scale (see migration path above).
+
+**Iteration 4 — Deep Space / Interplanetary**
+Extend scenario geography to the belt, Mars, and L-points. Applicable once cislunar mechanics are proven.
