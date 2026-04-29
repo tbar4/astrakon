@@ -1,6 +1,6 @@
 from enum import Enum
-from typing import Optional, Any
-from pydantic import BaseModel, model_validator
+from typing import Literal, Optional, Any
+from pydantic import BaseModel, Field, model_validator
 
 
 class Phase(str, Enum):
@@ -43,8 +43,14 @@ class InvestmentAllocation(BaseModel):
 
     @model_validator(mode="after")
     def validate_budget(self) -> "InvestmentAllocation":
-        if self.total() > 1.001:
-            raise ValueError(f"Investment allocations sum to {self.total():.3f}, must be <= 1.0")
+        fields = [self.r_and_d, self.constellation, self.launch_capacity,
+                  self.commercial, self.influence_ops, self.education,
+                  self.covert, self.diplomacy]
+        if any(f < 0.0 for f in fields):
+            raise ValueError("All investment allocations must be >= 0.0")
+        t = self.total()
+        if t > 1.001:
+            raise ValueError(f"Investment allocations sum to {t:.3f}, must be <= 1.0")
         return self
 
 
@@ -71,6 +77,16 @@ class Decision(BaseModel):
     operations: Optional[list[OperationalAction]] = None
     response: Optional[ResponseDecision] = None
 
+    @model_validator(mode="after")
+    def validate_phase_payload(self) -> "Decision":
+        if self.phase == Phase.INVEST and self.investment is None:
+            raise ValueError("INVEST phase Decision must include investment allocation")
+        if self.phase == Phase.OPERATIONS and self.operations is None:
+            raise ValueError("OPERATIONS phase Decision must include operations list")
+        if self.phase == Phase.RESPONSE and self.response is None:
+            raise ValueError("RESPONSE phase Decision must include response decision")
+        return self
+
 
 class Recommendation(BaseModel):
     phase: Phase
@@ -82,8 +98,8 @@ class Recommendation(BaseModel):
 class FactionState(BaseModel):
     faction_id: str
     name: str
-    budget_per_turn: int
-    current_budget: int
+    budget_per_turn: int = Field(ge=0)
+    current_budget: int = Field(ge=0)
     assets: FactionAssets
     tech_tree: dict[str, int] = {}
     coalition_id: Optional[str] = None
@@ -120,6 +136,6 @@ class CrisisEvent(BaseModel):
     description: str
     triggered_by: Optional[str] = None
     affected_factions: list[str]
-    visibility: str = "public"
+    visibility: Literal["public", "private", "faction-only"] = "public"
     severity: float = 0.5
     parameters: dict[str, Any] = {}

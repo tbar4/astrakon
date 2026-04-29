@@ -23,6 +23,11 @@ def test_investment_allocation_rejects_over_budget():
         )
 
 
+def test_investment_allocation_rejects_negative():
+    with pytest.raises(ValueError, match="must be >= 0.0"):
+        InvestmentAllocation(r_and_d=-0.10, constellation=0.50, rationale="negative")
+
+
 def test_faction_assets_default_empty():
     assets = FactionAssets()
     assert assets.leo_nodes == 0
