@@ -9,7 +9,7 @@ _BAR_WIDTH = 10
 
 
 def _dominance_bar(value: float, color: str) -> str:
-    filled = round(value * _BAR_WIDTH)
+    filled = round(min(max(value, 0.0), 1.0) * _BAR_WIDTH)
     return f"[{color}]{''.join([_BLOCK_FULL]*filled + [_BLOCK_EMPTY]*(_BAR_WIDTH-filled))}[/{color}]"
 
 
