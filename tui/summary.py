@@ -85,7 +85,8 @@ class TurnSummary:
         content = Text()
         for ev in self.events:
             severity = ev["severity"]
-            bar = "█" * round(severity * 5) + "░" * (5 - round(severity * 5))
+            filled = min(5, max(0, round(severity * 5)))
+            bar = "█" * filled + "░" * (5 - filled)
             content.append(f"  {bar} {ev['event_type'].upper()}\n", style="yellow")
             content.append(f"       {ev['description']}\n")
         return Panel(content, title="[bold yellow]CRISIS EVENTS[/bold yellow]", border_style="yellow")
@@ -171,7 +172,7 @@ class TurnSummary:
         for cid in self.coalition_states:
             dom = self.dominance.get(cid, 0.0)
             color = self.coalition_colors.get(cid, "white")
-            filled = round(dom * 16)
+            filled = min(16, max(0, round(dom * 16)))
             bar = f"[{color}]{'█'*filled}{'░'*(16-filled)}[/{color}]"
             gap = dom - self.victory_threshold
             gap_color = "green" if gap >= 0 else "red"
