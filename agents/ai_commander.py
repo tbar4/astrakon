@@ -1,3 +1,4 @@
+import asyncio
 import io
 from typing import Optional
 import anthropic
@@ -126,7 +127,8 @@ class AICommanderAgent(AgentInterface):
             return await fallback.submit_decision(phase)
 
         user_message = _parse_snapshot_to_user_message(self._last_snapshot, phase)
-        response = self._client.messages.create(
+        response = await asyncio.to_thread(
+            self._client.messages.create,
             model=self._model,
             max_tokens=1024,
             system=[{
