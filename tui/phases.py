@@ -79,10 +79,6 @@ def display_situation(snapshot: GameStateSnapshot) -> None:
                 f" (declared T{threat['declared_turn']}) — IMPACT IMMINENT[/bold red]"
             )
 
-    # Last-turn context
-    if snapshot.turn_log_summary:
-        console.print(f"\n[dim]Last turn: {snapshot.turn_log_summary}[/dim]")
-
 
 # ── Advisor recommendation display ───────────────────────────────────────────
 
