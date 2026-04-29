@@ -1,6 +1,5 @@
 # tui/invest.py
-from rich.console import Console, Group
-from rich.live import Live
+from rich.console import Console
 from rich.table import Table
 from rich.text import Text
 from rich.prompt import Prompt
@@ -101,65 +100,54 @@ def _render_table(allocations: dict[str, float], budget: int) -> Table:
     return table
 
 
+def _print_state(allocations: dict[str, float], budget: int) -> None:
+    total = sum(allocations.values())
+    pts_remaining = round((1.0 - total) * budget)
+    bar = _budget_bar(total)
+    bar.append(f"  |  {pts_remaining} pts remaining", style="dim")
+    console.print(bar)
+    console.print(_render_table(allocations, budget))
+
+
 def collect_investment(budget: int, snapshot: GameStateSnapshot) -> InvestmentAllocation:
     allocations: dict[str, float] = {cat: 0.0 for cat in _CATEGORIES}
 
-    def _renderable():
-        total = sum(allocations.values())
-        pts_remaining = round((1.0 - total) * budget)
-        bar = _budget_bar(total)
-        bar.append(f"  |  {pts_remaining} pts remaining", style="dim")
-        return Group(bar, _render_table(allocations, budget))
+    while True:
+        _print_state(allocations, budget)
+        raw = Prompt.ask("> Row to edit (1–11), or 'done'", console=console).strip().lower()
+        if raw == "done":
+            break
+        try:
+            idx = int(raw) - 1
+            if not (0 <= idx < len(_CATEGORIES)):
+                raise IndexError
+            cat = _CATEGORIES[idx]
+        except (ValueError, IndexError):
+            console.print("[red]Enter a row number 1–11, or 'done'.[/red]")
+            continue
 
-    live = Live(get_renderable=_renderable, console=console, transient=True, auto_refresh=False)
-    live.start()
-    live.refresh()
-
-    try:
-        while True:
-            live.stop()
-            raw = Prompt.ask("\n> Row to edit (1–11), or 'done'", console=console).strip().lower()
-            if raw == "done":
-                break
-            try:
-                idx = int(raw) - 1
-                if not (0 <= idx < len(_CATEGORIES)):
-                    raise IndexError
-                cat = _CATEGORIES[idx]
-            except (ValueError, IndexError):
-                console.print("[red]Enter a row number 1–11, or 'done'.[/red]")
-                live.start()
-                live.refresh()
-                continue
-
-            remaining_frac = round(1.0 - sum(v for k, v in allocations.items() if k != cat), 6)
-            current_pts = round(allocations[cat] * budget)
-            remaining_pts = round(remaining_frac * budget)
-            label = _CATEGORY_LABELS.get(cat, cat)
-            pts_str = Prompt.ask(
-                f"  [bold]{label}[/bold] — points to allocate"
-                f" (currently [cyan]{current_pts}[/cyan] pts,"
-                f" up to [green]{remaining_pts}[/green] pts available)",
-                default=str(current_pts),
-                console=console,
-            )
-            try:
-                new_pts = int(pts_str)
-                if new_pts < 0:
-                    raise ValueError
-            except ValueError:
-                console.print("[red]Enter a whole number of points (e.g. 40).[/red]")
-                live.start()
-                live.refresh()
-                continue
-            if new_pts > remaining_pts:
-                console.print(f"[yellow]Capped to {remaining_pts} pts (remaining budget).[/yellow]")
-                new_pts = remaining_pts
-            allocations[cat] = round(max(0.0, new_pts / budget), 6)
-            live.start()
-            live.refresh()
-    finally:
-        live.stop()
+        remaining_frac = round(1.0 - sum(v for k, v in allocations.items() if k != cat), 6)
+        current_pts = round(allocations[cat] * budget)
+        remaining_pts = round(remaining_frac * budget)
+        label = _CATEGORY_LABELS.get(cat, cat)
+        pts_str = Prompt.ask(
+            f"  [bold]{label}[/bold] — points to allocate"
+            f" (currently [cyan]{current_pts}[/cyan] pts,"
+            f" up to [green]{remaining_pts}[/green] pts available)",
+            default=str(current_pts),
+            console=console,
+        )
+        try:
+            new_pts = int(pts_str)
+            if new_pts < 0:
+                raise ValueError
+        except ValueError:
+            console.print("[red]Enter a whole number of points (e.g. 40).[/red]")
+            continue
+        if new_pts > remaining_pts:
+            console.print(f"[yellow]Capped to {remaining_pts} pts (remaining budget).[/yellow]")
+            new_pts = remaining_pts
+        allocations[cat] = round(max(0.0, new_pts / budget), 6)
 
     rationale = Prompt.ask("\n  Strategic rationale", console=console)
     return InvestmentAllocation(**allocations, rationale=rationale)
