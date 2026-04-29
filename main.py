@@ -226,10 +226,15 @@ async def main():
 
         if Confirm.ask("\nGenerate after-action report?", default=True):
             from output.aar import AfterActionReportGenerator
+            from datetime import datetime
             console.print("[dim]Generating AAR via Claude Opus...[/dim]")
             aar_gen = AfterActionReportGenerator()
             aar_text = await aar_gen.generate(audit=audit, scenario_name=scenario.name)
-            aar_path = Path("output") / f"aar_{scenario.name.replace(' ', '_').lower()}.md"
+            winner_slug = result.winner_coalition.replace(" ", "_").lower() if result.winner_coalition else "draw"
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            aar_dir = Path("output") / "aar"
+            aar_dir.mkdir(exist_ok=True)
+            aar_path = aar_dir / f"{timestamp}_{winner_slug}.md"
             aar_path.write_text(aar_text)
             console.print(f"[green]AAR saved to {aar_path}[/green]")
             console.print("\n[bold]AFTER-ACTION REPORT EXCERPT:[/bold]")
