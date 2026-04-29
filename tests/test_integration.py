@@ -7,6 +7,8 @@ from scenarios.loader import load_scenario
 from output.audit import AuditTrail
 from output.strategy_lib import StrategyLibrary
 
+SCENARIOS_DIR = Path(__file__).parent.parent / "scenarios"
+
 
 @pytest.fixture
 async def audit(tmp_path):
@@ -17,7 +19,7 @@ async def audit(tmp_path):
 
 
 async def test_full_3_turn_game_all_rule_based(audit, tmp_path):
-    scenario = load_scenario(Path("scenarios/pacific_crossroads.yaml"))
+    scenario = load_scenario(SCENARIOS_DIR / "pacific_crossroads.yaml")
     scenario.turns = 3
 
     agents = {}
@@ -37,7 +39,10 @@ async def test_full_3_turn_game_all_rule_based(audit, tmp_path):
     # Verify audit trail populated
     all_decisions = await audit.get_decisions()
     # At minimum: 4 factions * 3 phases * however many turns ran
-    assert len(all_decisions) >= len(scenario.factions) * 3
+    assert len(all_decisions) >= len(scenario.factions) * 3 * result.turns_completed
+
+    phases_recorded = {d["phase"] for d in all_decisions}
+    assert phases_recorded == {"invest", "operations", "response"}
 
     # Verify strategy lib records run
     lib = StrategyLibrary(str(tmp_path / "strategy_lib.db"))
@@ -47,14 +52,20 @@ async def test_full_3_turn_game_all_rule_based(audit, tmp_path):
 
 
 async def test_victory_condition_triggers_early_end(audit):
-    scenario = load_scenario(Path("scenarios/pacific_crossroads.yaml"))
+    scenario = load_scenario(SCENARIOS_DIR / "pacific_crossroads.yaml")
     scenario.turns = 20
     # Lower victory threshold so MaxConstellation wins quickly
     scenario.victory.coalition_orbital_dominance = 0.30
 
+    # Blue coalition factions get MaxConstellationAgent to grow faster;
+    # red coalition factions get MahanianAgent so blue dominance increases above initial.
+    blue_coalition = {"ussf", "nexus_corp"}
     agents = {}
     for faction in scenario.factions:
-        agent = MaxConstellationAgent()
+        if faction.faction_id in blue_coalition:
+            agent = MaxConstellationAgent()
+        else:
+            agent = MahanianAgent()
         agent.initialize(faction)
         agents[faction.faction_id] = agent
 
@@ -62,5 +73,5 @@ async def test_victory_condition_triggers_early_end(audit):
     result = await referee.run()
 
     # Should end before turn 20 because dominance threshold is low
-    assert result.turns_completed <= 20
-    assert result.winner_coalition is not None or result.turns_completed == 20
+    assert result.turns_completed < scenario.turns  # strict — must have ended early
+    assert result.winner_coalition is not None       # must have a winner
