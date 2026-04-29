@@ -77,6 +77,114 @@ class GameReferee:
         await self._run_investment_phase(turn)
         await self._run_operations_phase(turn)
         await self._run_response_phase(turn)
+        await self._display_turn_summary(turn)
+
+    async def _display_turn_summary(self, turn: int):
+        if not any(agent.is_human for agent in self.agents.values()):
+            return
+
+        import json
+        from rich.console import Console
+        from rich.table import Table
+        from rich.panel import Panel
+
+        _console = Console()
+        decisions = await self.audit.get_decisions(turn=turn)
+        events = await self.audit.get_events(turn=turn)
+
+        _console.print(f"\n[bold cyan]{'═' * 50}[/bold cyan]")
+        _console.print(f"[bold cyan]  END OF TURN {turn} — INTELLIGENCE SUMMARY[/bold cyan]")
+        _console.print(f"[bold cyan]{'═' * 50}[/bold cyan]")
+
+        # Crisis events
+        if events:
+            _console.print("\n[bold yellow]CRISIS EVENTS[/bold yellow]")
+            for ev in events:
+                severity = ev["severity"]
+                bar = "█" * round(severity * 5) + "░" * (5 - round(severity * 5))
+                _console.print(
+                    f"  [yellow]{bar}[/yellow] [bold]{ev['event_type'].upper()}[/bold]\n"
+                    f"       {ev['description']}"
+                )
+        else:
+            _console.print("\n[dim]No crisis events this turn.[/dim]")
+
+        # Operations — public actions only
+        _PUBLIC_OPS = {"signal", "alliance_move"}
+        _OBSERVABLE_OPS = {"task_assets"}
+        ops_rows = []
+        for d in decisions:
+            if d["phase"] != "operations":
+                continue
+            fid = d["faction_id"]
+            name = self.faction_states[fid].name
+            data = json.loads(d["decision_json"])
+            for op in (data.get("operations") or []):
+                action = op.get("action_type", "")
+                if action in _PUBLIC_OPS:
+                    ops_rows.append((name, action, op.get("rationale", "—")))
+                elif action in _OBSERVABLE_OPS:
+                    ops_rows.append((name, action, "[dim](details classified)[/dim]"))
+                # gray_zone / coordinate: hidden
+
+        _console.print("\n[bold]OBSERVED OPERATIONS[/bold]")
+        if ops_rows:
+            ops_table = Table(show_header=True, header_style="bold", box=None, padding=(0, 2))
+            ops_table.add_column("Faction")
+            ops_table.add_column("Action")
+            ops_table.add_column("Statement / Details")
+            for row in ops_rows:
+                ops_table.add_row(*row)
+            _console.print(ops_table)
+        else:
+            _console.print("  [dim]No publicly observable operations this turn.[/dim]")
+
+        # Response phase — escalation and public statements
+        _console.print("\n[bold]FACTION RESPONSES[/bold]")
+        resp_table = Table(show_header=True, header_style="bold", box=None, padding=(0, 2))
+        resp_table.add_column("Faction")
+        resp_table.add_column("Posture")
+        resp_table.add_column("Public Statement")
+        for d in decisions:
+            if d["phase"] != "response":
+                continue
+            fid = d["faction_id"]
+            name = self.faction_states[fid].name
+            data = json.loads(d["decision_json"])
+            resp = data.get("response") or {}
+            if resp.get("escalate"):
+                posture = "[bold red]ESCALATED[/bold red]"
+                if resp.get("retaliate") and resp.get("target_faction"):
+                    target_name = self.faction_states.get(
+                        resp["target_faction"], type("", (), {"name": resp["target_faction"]})()
+                    ).name
+                    posture += f" → retaliated vs {target_name}"
+            else:
+                posture = "[green]stood down[/green]"
+            statement = resp.get("public_statement") or "[dim]—[/dim]"
+            resp_table.add_row(name, posture, statement)
+        _console.print(resp_table)
+
+        # Board state — coalition orbital dominance (publicly observable)
+        all_assets = {fid: fs.assets for fid, fs in self.faction_states.items()}
+        _console.print("\n[bold]ORBITAL DOMINANCE[/bold]")
+        dom_table = Table(show_header=True, header_style="bold", box=None, padding=(0, 2))
+        dom_table.add_column("Coalition")
+        dom_table.add_column("Members")
+        dom_table.add_column("Dominance", justify="right")
+        dom_table.add_column("vs. Victory threshold", justify="right")
+        threshold = self.scenario.victory.coalition_orbital_dominance
+        for cid, coalition in self.coalition_states.items():
+            dominance = self.sim.compute_coalition_dominance(coalition.member_ids, all_assets)
+            member_names = ", ".join(
+                self.faction_states[m].name for m in coalition.member_ids if m in self.faction_states
+            )
+            pct = f"{dominance:.1%}"
+            gap = f"{dominance - threshold:+.1%}"
+            color = "green" if dominance >= threshold else "red"
+            dom_table.add_row(cid, member_names, pct, f"[{color}]{gap}[/{color}]")
+        _console.print(dom_table)
+        _console.print(f"  [dim]Board tension: {self.tension_level:.0%}[/dim]\n")
 
     def _replenish_budgets(self, turn: int):
         for fs in self.faction_states.values():
