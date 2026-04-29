@@ -50,10 +50,29 @@ def _display_recommendation(rec: Recommendation):
     ))
 
 
+_INVEST_DESCRIPTIONS = {
+    "r_and_d":         "Tech tree advancement — deferred return in 3 turns",
+    "constellation":   "Deploy LEO nodes immediately (5 pts/node)",
+    "launch_capacity": "Increase launch throughput (15 pts/unit)",
+    "commercial":      "Commercial partnerships — revenue and soft influence",
+    "influence_ops":   "EW jammers and information operations (12 pts/jammer)",
+    "education":       "Workforce development — deferred return in 6 turns",
+    "covert":          "Deniable ASAT capability (25 pts/unit)",
+    "diplomacy":       "Coalition cohesion and treaty leverage",
+}
+
+
 def _collect_investment() -> InvestmentAllocation:
-    console.print("\n[bold]INVESTMENT ALLOCATION[/bold] (fractions, must sum to ≤ 1.0)")
-    categories = ["r_and_d", "constellation", "launch_capacity", "commercial",
-                  "influence_ops", "education", "covert", "diplomacy"]
+    menu = Table(title="Investment Categories", show_header=True, header_style="bold")
+    menu.add_column("#", justify="right", style="dim")
+    menu.add_column("Category")
+    menu.add_column("Effect")
+    for i, (cat, desc) in enumerate(_INVEST_DESCRIPTIONS.items(), 1):
+        menu.add_row(str(i), cat, desc)
+    console.print(menu)
+    console.print("[bold]INVESTMENT ALLOCATION[/bold] (fractions, must sum to ≤ 1.0)\n")
+
+    categories = list(_INVEST_DESCRIPTIONS.keys())
     values = {}
     remaining = 1.0
     for cat in categories:
