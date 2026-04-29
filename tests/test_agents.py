@@ -125,6 +125,38 @@ persona:
     assert decision.investment.r_and_d == 0.20
 
 
+async def test_ai_commander_get_recommendation(test_faction, test_snapshot):
+    mock_response = MagicMock()
+    mock_response.content = [MagicMock(
+        type="tool_use",
+        name="allocate_budget",
+        input={
+            "r_and_d": 0.30, "constellation": 0.50, "launch_capacity": 0.0,
+            "commercial": 0.0, "influence_ops": 0.0, "education": 0.0,
+            "covert": 0.20, "diplomacy": 0.0,
+            "rationale": "Prioritize R&D and constellation for long-term dominance.",
+        }
+    )]
+    with patch("agents.ai_commander.anthropic.Anthropic") as MockClient:
+        MockClient.return_value.messages.create.return_value = mock_response
+        agent = AICommanderAgent(persona_yaml="persona:\n  name: T\n  system_prompt_context: x\n  doctrine_narrative: y\n  decision_style: z\n  escalation_tolerance: 0.5\n  coalition_loyalty: 0.5\n")
+        agent.initialize(test_faction)
+        agent.receive_state(test_snapshot)
+        rec = await agent.get_recommendation(Phase.INVEST)
+    assert rec is not None
+    assert len(rec.strategic_rationale) > 0
+    assert rec.top_recommendation.investment is not None
+    assert rec.top_recommendation.investment.r_and_d == 0.30
+
+
+async def test_ai_commander_get_recommendation_returns_none_without_snapshot(test_faction):
+    with patch("agents.ai_commander.anthropic.Anthropic"):
+        agent = AICommanderAgent(persona_yaml="persona:\n  name: T\n  system_prompt_context: x\n  doctrine_narrative: y\n  decision_style: z\n  escalation_tolerance: 0.5\n  coalition_loyalty: 0.5\n")
+        agent.initialize(test_faction)
+        rec = await agent.get_recommendation(Phase.INVEST)
+    assert rec is None
+
+
 async def test_ai_commander_rationale_captured(test_faction, test_snapshot):
     mock_response = MagicMock()
     mock_response.content = [MagicMock(

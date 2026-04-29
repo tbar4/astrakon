@@ -6,7 +6,7 @@ from ruamel.yaml import YAML
 from agents.base import AgentInterface
 from engine.state import (
     Phase, Decision, InvestmentAllocation, OperationalAction, ResponseDecision,
-    GameStateSnapshot
+    GameStateSnapshot, Recommendation
 )
 
 
@@ -119,37 +119,7 @@ class AICommanderAgent(AgentInterface):
         self._client = anthropic.Anthropic()
         self._system_prompt = _build_system_prompt(self._persona)
 
-    async def submit_decision(self, phase: Phase) -> Decision:
-        if self._last_snapshot is None:
-            from agents.rule_based import MahanianAgent
-            fallback = MahanianAgent()
-            fallback.faction_id = self.faction_id
-            return await fallback.submit_decision(phase)
-
-        user_message = _parse_snapshot_to_user_message(self._last_snapshot, phase)
-        response = await asyncio.to_thread(
-            self._client.messages.create,
-            model=self._model,
-            max_tokens=1024,
-            system=[{
-                "type": "text",
-                "text": self._system_prompt,
-                "cache_control": {"type": "ephemeral"},
-            }],
-            messages=[{"role": "user", "content": user_message}],
-            tools=PHASE_TOOLS[phase],
-            tool_choice={"type": "any"},
-        )
-
-        tool_use = next((b for b in response.content if b.type == "tool_use"), None)
-        if not tool_use:
-            from agents.rule_based import MahanianAgent
-            fallback = MahanianAgent()
-            fallback.faction_id = self.faction_id
-            return await fallback.submit_decision(phase)
-
-        inp = tool_use.input
-
+    def _build_decision(self, phase: Phase, inp: dict) -> Decision:
         if phase == Phase.INVEST:
             return Decision(
                 phase=phase, faction_id=self.faction_id,
@@ -185,3 +155,62 @@ class AICommanderAgent(AgentInterface):
                 rationale=inp.get("rationale", ""),
             )
         )
+
+    async def _call_claude(self, user_message: str, phase: Phase):
+        return await asyncio.to_thread(
+            self._client.messages.create,
+            model=self._model,
+            max_tokens=1024,
+            system=[{
+                "type": "text",
+                "text": self._system_prompt,
+                "cache_control": {"type": "ephemeral"},
+            }],
+            messages=[{"role": "user", "content": user_message}],
+            tools=PHASE_TOOLS[phase],
+            tool_choice={"type": "any"},
+        )
+
+    async def submit_decision(self, phase: Phase) -> Decision:
+        if self._last_snapshot is None:
+            from agents.rule_based import MahanianAgent
+            fallback = MahanianAgent()
+            fallback.faction_id = self.faction_id
+            return await fallback.submit_decision(phase)
+
+        user_message = _parse_snapshot_to_user_message(self._last_snapshot, phase)
+        response = await self._call_claude(user_message, phase)
+
+        tool_use = next((b for b in response.content if b.type == "tool_use"), None)
+        if not tool_use:
+            from agents.rule_based import MahanianAgent
+            fallback = MahanianAgent()
+            fallback.faction_id = self.faction_id
+            return await fallback.submit_decision(phase)
+
+        return self._build_decision(phase, tool_use.input)
+
+    async def get_recommendation(self, phase: Phase) -> Optional[Recommendation]:
+        if self._last_snapshot is None:
+            return None
+        try:
+            advisory_message = (
+                "ADVISORY MODE: A human commander is requesting your strategic recommendation.\n"
+                "Analyze the situation and provide your recommended decision with a clear rationale.\n\n"
+            ) + _parse_snapshot_to_user_message(self._last_snapshot, phase)
+
+            response = await self._call_claude(advisory_message, phase)
+            tool_use = next((b for b in response.content if b.type == "tool_use"), None)
+            if not tool_use:
+                return None
+
+            inp = tool_use.input
+            decision = self._build_decision(phase, inp)
+            return Recommendation(
+                phase=phase,
+                options=[],
+                top_recommendation=decision,
+                strategic_rationale=inp.get("rationale", ""),
+            )
+        except Exception:
+            return None
