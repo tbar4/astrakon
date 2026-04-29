@@ -15,6 +15,20 @@ _CATEGORIES = [
     "influence_ops", "education", "covert", "diplomacy",
 ]
 
+_CATEGORY_LABELS = {
+    "r_and_d":             "R&D",
+    "constellation":       "Constellation (LEO)",
+    "meo_deployment":      "MEO Deployment",
+    "geo_deployment":      "GEO Deployment",
+    "cislunar_deployment": "Cislunar",
+    "launch_capacity":     "Launch Capacity",
+    "commercial":          "Commercial",
+    "influence_ops":       "Influence Ops",
+    "education":           "Education",
+    "covert":              "Covert",
+    "diplomacy":           "Diplomacy",
+}
+
 _CATEGORY_COLORS = {
     "constellation": "green", "meo_deployment": "blue", "geo_deployment": "cyan",
     "cislunar_deployment": "bright_cyan", "covert": "red", "influence_ops": "yellow",
@@ -78,7 +92,7 @@ def _render_table(allocations: dict[str, float], budget: int) -> Table:
         color = _CATEGORY_COLORS.get(cat, "white")
         style = color if frac > 0 else "dim"
         table.add_row(
-            str(i), cat,
+            str(i), _CATEGORY_LABELS.get(cat, cat),
             f"{frac:.0%}" if frac > 0 else "—",
             str(pts) if pts > 0 else "—",
             _output_str(cat, pts),
@@ -104,7 +118,7 @@ def collect_investment(budget: int, snapshot: GameStateSnapshot) -> InvestmentAl
     try:
         while True:
             live.stop()
-            raw = Prompt.ask("\n> edit # (or 'done')", console=console).strip().lower()
+            raw = Prompt.ask("\n> Row to edit (1–11), or 'done'", console=console).strip().lower()
             if raw == "done":
                 break
             try:
@@ -113,28 +127,35 @@ def collect_investment(budget: int, snapshot: GameStateSnapshot) -> InvestmentAl
                     raise IndexError
                 cat = _CATEGORIES[idx]
             except (ValueError, IndexError):
-                console.print("[red]Enter a number 1–11 or 'done'.[/red]")
+                console.print("[red]Enter a row number 1–11, or 'done'.[/red]")
                 live.start()
                 live.refresh()
                 continue
 
-            remaining = round(1.0 - sum(v for k, v in allocations.items() if k != cat), 6)
-            val_str = Prompt.ask(
-                f"  {cat} (current: {allocations[cat]:.0%}, remaining: {remaining:.0%})",
-                default=f"{allocations[cat]:.3f}",
+            remaining_frac = round(1.0 - sum(v for k, v in allocations.items() if k != cat), 6)
+            current_pts = round(allocations[cat] * budget)
+            remaining_pts = round(remaining_frac * budget)
+            label = _CATEGORY_LABELS.get(cat, cat)
+            pts_str = Prompt.ask(
+                f"  [bold]{label}[/bold] — points to allocate"
+                f" (currently [cyan]{current_pts}[/cyan] pts,"
+                f" up to [green]{remaining_pts}[/green] pts available)",
+                default=str(current_pts),
                 console=console,
             )
             try:
-                val = float(val_str)
+                new_pts = int(pts_str)
+                if new_pts < 0:
+                    raise ValueError
             except ValueError:
-                console.print("[red]Enter a decimal fraction e.g. 0.30[/red]")
+                console.print("[red]Enter a whole number of points (e.g. 40).[/red]")
                 live.start()
                 live.refresh()
                 continue
-            if val > remaining + 0.001:
-                console.print(f"[yellow]Capped to {remaining:.3f} (remaining budget).[/yellow]")
-                val = remaining
-            allocations[cat] = round(max(0.0, val), 3)
+            if new_pts > remaining_pts:
+                console.print(f"[yellow]Capped to {remaining_pts} pts (remaining budget).[/yellow]")
+                new_pts = remaining_pts
+            allocations[cat] = round(max(0.0, new_pts / budget), 6)
             live.start()
             live.refresh()
     finally:
