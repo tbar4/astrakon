@@ -54,8 +54,10 @@ async def test_full_3_turn_game_all_rule_based(audit, tmp_path):
 async def test_victory_condition_triggers_early_end(audit):
     scenario = load_scenario(SCENARIOS_DIR / "pacific_crossroads.yaml")
     scenario.turns = 20
-    # Lower victory threshold so MaxConstellation wins quickly
+    # Lower victory threshold so MaxConstellation wins quickly;
+    # disable individual conditions so the coalition dominance check alone triggers.
     scenario.victory.coalition_orbital_dominance = 0.30
+    scenario.victory.individual_conditions_required = False
 
     # Blue coalition factions get MaxConstellationAgent to grow faster;
     # red coalition factions get MahanianAgent so blue dominance increases above initial.

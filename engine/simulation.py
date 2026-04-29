@@ -11,7 +11,10 @@ class InvestmentResult:
 
 
 class InvestmentResolver:
-    CONSTELLATION_NODE_COST = 5
+    CONSTELLATION_NODE_COST = 5    # LEO — cheap, fast to deploy
+    MEO_NODE_COST = 12             # GPS/navigation regime — 2× dominance weight
+    GEO_NODE_COST = 25             # Strategic persistent orbit — 3× dominance weight
+    CISLUNAR_NODE_COST = 40        # Strategic high ground — 4× dominance weight
     LAUNCH_CAPACITY_COST = 15
     ASAT_DENIABLE_COST = 25
     EW_JAMMER_COST = 12
@@ -26,6 +29,9 @@ class InvestmentResolver:
         deferred = []
         spent = 0
         leo_nodes = 0
+        meo_nodes = 0
+        geo_nodes = 0
+        cislunar_nodes = 0
         launch_capacity = 0
         asat_deniable = 0
         ew_jammers = 0
@@ -35,6 +41,24 @@ class InvestmentResolver:
             nodes = pts // self.CONSTELLATION_NODE_COST
             leo_nodes += nodes
             spent += nodes * self.CONSTELLATION_NODE_COST
+
+        if allocation.meo_deployment > 0:
+            pts = int(budget * allocation.meo_deployment)
+            nodes = pts // self.MEO_NODE_COST
+            meo_nodes += nodes
+            spent += nodes * self.MEO_NODE_COST
+
+        if allocation.geo_deployment > 0:
+            pts = int(budget * allocation.geo_deployment)
+            nodes = pts // self.GEO_NODE_COST
+            geo_nodes += nodes
+            spent += nodes * self.GEO_NODE_COST
+
+        if allocation.cislunar_deployment > 0:
+            pts = int(budget * allocation.cislunar_deployment)
+            nodes = pts // self.CISLUNAR_NODE_COST
+            cislunar_nodes += nodes
+            spent += nodes * self.CISLUNAR_NODE_COST
 
         if allocation.launch_capacity > 0:
             pts = int(budget * allocation.launch_capacity)
@@ -76,6 +100,9 @@ class InvestmentResolver:
 
         immediate = FactionAssets(
             leo_nodes=leo_nodes,
+            meo_nodes=meo_nodes,
+            geo_nodes=geo_nodes,
+            cislunar_nodes=cislunar_nodes,
             launch_capacity=launch_capacity,
             asat_deniable=asat_deniable,
             ew_jammers=ew_jammers,
@@ -92,7 +119,9 @@ class SDAFilter:
         self, adversary_assets: FactionAssets, observer_sda_level: float
     ) -> FactionAssets:
         leo_nodes = int(adversary_assets.leo_nodes * min(observer_sda_level + 0.3, 1.0))
+        meo_nodes = int(adversary_assets.meo_nodes * min(observer_sda_level + 0.2, 1.0))
         geo_nodes = int(adversary_assets.geo_nodes * min(observer_sda_level + 0.4, 1.0))
+        cislunar_nodes = int(adversary_assets.cislunar_nodes * observer_sda_level)
         asat_kinetic = 0
         asat_deniable = 0
         if observer_sda_level >= 0.3:
@@ -102,7 +131,9 @@ class SDAFilter:
         ew_jammers = int(adversary_assets.ew_jammers * observer_sda_level)
         return FactionAssets(
             leo_nodes=leo_nodes,
+            meo_nodes=meo_nodes,
             geo_nodes=geo_nodes,
+            cislunar_nodes=cislunar_nodes,
             asat_kinetic=asat_kinetic,
             asat_deniable=asat_deniable,
             ew_jammers=ew_jammers,
@@ -115,11 +146,28 @@ class ConflictResolver:
         attacker_sda_level: float
     ) -> dict:
         if attacker_assets.asat_kinetic == 0:
-            return {"nodes_destroyed": 0, "detected": False, "attributed": False}
-        base_effectiveness = min(attacker_assets.asat_kinetic * 3, 20)
-        nodes_destroyed = int(base_effectiveness * attacker_sda_level)
+            return {"nodes_destroyed": 0, "regime": "none", "detected": False, "attributed": False}
+        # Target priority: LEO (most accessible) → MEO → GEO
+        # Effectiveness degrades with higher orbits (harder to reach)
+        if target_assets.leo_nodes > 0:
+            regime = "leo"
+            effectiveness = min(attacker_assets.asat_kinetic * 3, 20)
+        elif target_assets.meo_nodes > 0:
+            regime = "meo"
+            effectiveness = min(attacker_assets.asat_kinetic * 2, 10)
+        elif target_assets.geo_nodes > 0:
+            regime = "geo"
+            effectiveness = min(attacker_assets.asat_kinetic * 1, 5)
+        elif target_assets.cislunar_nodes > 0:
+            regime = "cislunar"
+            effectiveness = max(attacker_assets.asat_kinetic - 2, 0)
+        else:
+            return {"nodes_destroyed": 0, "regime": "none", "detected": True, "attributed": True}
+
+        nodes_destroyed = int(effectiveness * attacker_sda_level)
         return {
             "nodes_destroyed": nodes_destroyed,
+            "regime": regime,
             "detected": random.random() < 0.8,
             "attributed": random.random() < attacker_sda_level,
         }
@@ -148,22 +196,22 @@ class SimulationEngine:
     def compute_orbital_dominance(
         self, faction_id: str, all_assets: dict[str, FactionAssets]
     ) -> float:
-        total_nodes = sum(a.total_orbital_nodes() for a in all_assets.values())
-        if total_nodes == 0:
+        total_weighted = sum(a.weighted_orbital_nodes() for a in all_assets.values())
+        if total_weighted == 0:
             return 0.0
         if faction_id not in all_assets:
             return 0.0
-        return all_assets[faction_id].total_orbital_nodes() / total_nodes
+        return all_assets[faction_id].weighted_orbital_nodes() / total_weighted
 
     def compute_coalition_dominance(
         self, coalition_member_ids: list[str], all_assets: dict[str, FactionAssets]
     ) -> float:
-        coalition_nodes = sum(
-            all_assets[fid].total_orbital_nodes()
+        coalition_weighted = sum(
+            all_assets[fid].weighted_orbital_nodes()
             for fid in coalition_member_ids
             if fid in all_assets
         )
-        total_nodes = sum(a.total_orbital_nodes() for a in all_assets.values())
-        if total_nodes == 0:
+        total_weighted = sum(a.weighted_orbital_nodes() for a in all_assets.values())
+        if total_weighted == 0:
             return 0.0
-        return coalition_nodes / total_nodes
+        return coalition_weighted / total_weighted

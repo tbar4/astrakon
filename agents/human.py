@@ -51,14 +51,17 @@ def _display_recommendation(rec: Recommendation):
 
 
 _INVEST_DESCRIPTIONS = {
-    "r_and_d":         "Tech tree advancement — deferred return in 3 turns",
-    "constellation":   "Deploy LEO nodes immediately (5 pts/node)",
-    "launch_capacity": "Increase launch throughput (15 pts/unit)",
-    "commercial":      "Commercial partnerships — revenue and soft influence",
-    "influence_ops":   "EW jammers and information operations (12 pts/jammer)",
-    "education":       "Workforce development — deferred return in 6 turns",
-    "covert":          "Deniable ASAT capability (25 pts/unit)",
-    "diplomacy":       "Coalition cohesion and treaty leverage",
+    "r_and_d":             "Tech tree advancement — deferred return in 3 turns",
+    "constellation":       "Deploy LEO nodes immediately (5 pts/node, 1× dominance weight)",
+    "meo_deployment":      "Deploy MEO nodes (12 pts/node, 2× weight — GPS/navigation regime)",
+    "geo_deployment":      "Deploy GEO nodes (25 pts/node, 3× weight — persistent strategic orbit)",
+    "cislunar_deployment": "Deploy cislunar nodes (40 pts/node, 4× weight — strategic high ground)",
+    "launch_capacity":     "Increase launch throughput (15 pts/unit)",
+    "commercial":          "Commercial partnerships — revenue and soft influence",
+    "influence_ops":       "EW jammers and information operations (12 pts/jammer)",
+    "education":           "Workforce development — deferred return in 6 turns",
+    "covert":              "Deniable ASAT capability (25 pts/unit)",
+    "diplomacy":           "Coalition cohesion and treaty leverage",
 }
 
 
@@ -88,11 +91,17 @@ def _collect_investment() -> InvestmentAllocation:
 
 
 _OPS_DESCRIPTIONS = {
-    "task_assets":    "Direct your satellites/ASATs to a specific mission (surveillance, patrol, intercept)",
-    "coordinate":     "Synchronize operations with a coalition ally this turn",
-    "gray_zone":      "Conduct deniable activity — jamming, spoofing, or proximity ops below threshold",
+    "task_assets":    "Direct your satellites/ASATs: surveillance, patrol, or kinetic intercept (1-turn lag, SDA-visible)",
+    "coordinate":     "Synchronize operations with a coalition ally (+10% SDA bonus to both, loyalty-pressure applies)",
+    "gray_zone":      "Deniable activity — uses ASAT-deniable if available, else EW jamming against adversary",
     "alliance_move":  "Diplomatic-military signal: reinforce a partner, extend deterrence, or shift alignment",
     "signal":         "Deliberate public or back-channel communication to shape adversary expectations",
+}
+
+_TASK_MISSIONS = {
+    "sda_sweep":  "Sweep for adversary assets — intelligence only",
+    "patrol":     "Patrol contested orbital band — shows resolve",
+    "intercept":  "Dispatch kinetic interceptor — arrives NEXT TURN, detectable by adversary SDA ≥ 30%",
 }
 
 
@@ -108,10 +117,25 @@ def _collect_operations() -> list[OperationalAction]:
     actions = list(_OPS_DESCRIPTIONS.keys())
     action_type = Prompt.ask("Action type", choices=actions, default="task_assets")
     target = Prompt.ask("Target faction (leave blank for none)", default="")
+
+    params: dict = {}
+    if action_type == "task_assets":
+        mission_menu = Table(title="Mission Type", show_header=True, header_style="dim", box=None)
+        mission_menu.add_column("Mission")
+        mission_menu.add_column("Effect")
+        for m, d in _TASK_MISSIONS.items():
+            mission_menu.add_row(m, d)
+        console.print(mission_menu)
+        mission = Prompt.ask(
+            "  Mission", choices=list(_TASK_MISSIONS.keys()), default="sda_sweep"
+        )
+        params = {"mission": mission}
+
     rationale = Prompt.ask("Rationale")
     return [OperationalAction(
         action_type=action_type,
         target_faction=target if target else None,
+        parameters=params,
         rationale=rationale,
     )]
 

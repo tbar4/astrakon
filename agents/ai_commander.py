@@ -12,19 +12,29 @@ from engine.state import (
 
 INVEST_TOOL = {
     "name": "allocate_budget",
-    "description": "Allocate this turn's budget across investment categories. Values must sum to <= 1.0.",
+    "description": (
+        "Allocate this turn's budget across investment categories. Values must sum to <= 1.0. "
+        "Orbital deployment costs and dominance weights: "
+        "LEO (constellation) = 5 pts/node, 1× weight; "
+        "MEO (meo_deployment) = 12 pts/node, 2× weight (GPS/navigation regime); "
+        "GEO (geo_deployment) = 25 pts/node, 3× weight (persistent strategic); "
+        "Cislunar (cislunar_deployment) = 40 pts/node, 4× weight (strategic high ground)."
+    ),
     "input_schema": {
         "type": "object",
         "properties": {
-            "r_and_d":        {"type": "number", "description": "R&D investment fraction (0.0–1.0)"},
-            "constellation":  {"type": "number", "description": "Constellation deployment fraction"},
-            "launch_capacity":{"type": "number", "description": "Launch capacity investment fraction"},
-            "commercial":     {"type": "number", "description": "Commercial partnerships fraction"},
-            "influence_ops":  {"type": "number", "description": "Influence operations fraction"},
-            "education":      {"type": "number", "description": "Education/workforce fraction"},
-            "covert":         {"type": "number", "description": "Covert programs fraction"},
-            "diplomacy":      {"type": "number", "description": "Diplomacy fraction"},
-            "rationale":      {"type": "string", "description": "Strategic rationale for this allocation"},
+            "r_and_d":             {"type": "number", "description": "R&D investment fraction (0.0–1.0)"},
+            "constellation":       {"type": "number", "description": "LEO node deployment fraction (5 pts/node, 1× weight)"},
+            "meo_deployment":      {"type": "number", "description": "MEO node deployment fraction (12 pts/node, 2× dominance weight)"},
+            "geo_deployment":      {"type": "number", "description": "GEO node deployment fraction (25 pts/node, 3× dominance weight)"},
+            "cislunar_deployment": {"type": "number", "description": "Cislunar node deployment fraction (40 pts/node, 4× dominance weight)"},
+            "launch_capacity":     {"type": "number", "description": "Launch capacity investment fraction"},
+            "commercial":          {"type": "number", "description": "Commercial partnerships fraction"},
+            "influence_ops":       {"type": "number", "description": "Influence operations fraction (EW jammers)"},
+            "education":           {"type": "number", "description": "Education/workforce fraction"},
+            "covert":              {"type": "number", "description": "Covert programs fraction (deniable ASAT)"},
+            "diplomacy":           {"type": "number", "description": "Diplomacy fraction"},
+            "rationale":           {"type": "string", "description": "Strategic rationale for this allocation"},
         },
         "required": ["rationale"],
     },
@@ -92,20 +102,40 @@ def _parse_snapshot_to_user_message(snapshot: GameStateSnapshot, phase: Phase) -
     lines = [
         f"TURN {snapshot.turn} — PHASE: {phase.value.upper()}",
         f"BUDGET: {fs.current_budget} points",
-        f"BOARD TENSION: {snapshot.tension_level:.0%} | DEBRIS FIELD: {snapshot.debris_level:.0%}",
+        f"BOARD TENSION: {snapshot.tension_level:.0%} | DEBRIS FIELD: {snapshot.debris_level:.0%} | "
+        f"JOINT FORCE EFFECTIVENESS: {snapshot.joint_force_effectiveness:.0%}",
         "",
         "YOUR ASSETS:",
-        f"  LEO nodes: {assets.leo_nodes} | MEO: {assets.meo_nodes} | GEO: {assets.geo_nodes}",
+        f"  LEO nodes: {assets.leo_nodes} (1×) | MEO: {assets.meo_nodes} (2×) | "
+        f"GEO: {assets.geo_nodes} (3×) | Cislunar: {assets.cislunar_nodes} (4×)",
         f"  ASAT kinetic: {assets.asat_kinetic} | Deniable ASAT: {assets.asat_deniable}",
         f"  EW jammers: {assets.ew_jammers} | SDA sensors: {assets.sda_sensors}",
         f"  Launch capacity: {assets.launch_capacity}",
+        f"  Deterrence: {fs.deterrence_score:.0f} | Disruption: {fs.disruption_score:.0f} | "
+        f"Market share: {fs.market_share:.1%}",
         "",
         "ADVERSARY ESTIMATES (SDA-filtered):",
     ]
     for fid, est in snapshot.adversary_estimates.items():
-        lines.append(f"  {fid}: LEO={est.leo_nodes} GEO={est.geo_nodes} ASAT-K={est.asat_kinetic}")
+        lines.append(
+            f"  {fid}: LEO={est.leo_nodes} MEO={est.meo_nodes} GEO={est.geo_nodes} "
+            f"Cislunar={est.cislunar_nodes} ASAT-K={est.asat_kinetic}"
+        )
+    if snapshot.incoming_threats:
+        lines.append("")
+        lines.append("INCOMING THREATS DETECTED:")
+        for threat in snapshot.incoming_threats:
+            lines.append(
+                f"  ⚠ KINETIC APPROACH from {threat['attacker']} "
+                f"(declared turn {threat['declared_turn']}) — impact imminent"
+            )
     lines.append("")
     lines.append("AVAILABLE ACTIONS: " + ", ".join(snapshot.available_actions))
+    if phase == Phase.OPERATIONS:
+        lines.append(
+            "  task_assets intercept: set parameters={'mission':'intercept'} to dispatch a "
+            "kinetic interceptor (arrives next turn, visible to adversary SDA ≥ 30%)"
+        )
     if snapshot.turn_log_summary:
         lines += ["", "LAST TURN EVENTS:", snapshot.turn_log_summary]
     return "\n".join(lines)
@@ -127,6 +157,9 @@ class AICommanderAgent(AgentInterface):
                 investment=InvestmentAllocation(
                     r_and_d=inp.get("r_and_d", 0),
                     constellation=inp.get("constellation", 0),
+                    meo_deployment=inp.get("meo_deployment", 0),
+                    geo_deployment=inp.get("geo_deployment", 0),
+                    cislunar_deployment=inp.get("cislunar_deployment", 0),
                     launch_capacity=inp.get("launch_capacity", 0),
                     commercial=inp.get("commercial", 0),
                     influence_ops=inp.get("influence_ops", 0),

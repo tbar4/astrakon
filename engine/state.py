@@ -24,10 +24,22 @@ class FactionAssets(BaseModel):
     def total_orbital_nodes(self) -> int:
         return self.leo_nodes + self.meo_nodes + self.geo_nodes + self.cislunar_nodes
 
+    def weighted_orbital_nodes(self) -> float:
+        """Strategic value weight: cislunar=4×, GEO=3×, MEO=2×, LEO=1×."""
+        return (
+            self.leo_nodes * 1.0 +
+            self.meo_nodes * 2.0 +
+            self.geo_nodes * 3.0 +
+            self.cislunar_nodes * 4.0
+        )
+
 
 class InvestmentAllocation(BaseModel):
     r_and_d: float = 0.0
-    constellation: float = 0.0
+    constellation: float = 0.0        # LEO node deployment (5 pts/node)
+    meo_deployment: float = 0.0       # MEO node deployment (12 pts/node, 2× dominance weight)
+    geo_deployment: float = 0.0       # GEO node deployment (25 pts/node, 3× dominance weight)
+    cislunar_deployment: float = 0.0  # Cislunar node deployment (40 pts/node, 4× dominance weight)
     launch_capacity: float = 0.0
     commercial: float = 0.0
     influence_ops: float = 0.0
@@ -37,15 +49,21 @@ class InvestmentAllocation(BaseModel):
     rationale: str = ""
 
     def total(self) -> float:
-        return (self.r_and_d + self.constellation + self.launch_capacity +
-                self.commercial + self.influence_ops + self.education +
-                self.covert + self.diplomacy)
+        return (
+            self.r_and_d + self.constellation + self.meo_deployment +
+            self.geo_deployment + self.cislunar_deployment +
+            self.launch_capacity + self.commercial + self.influence_ops +
+            self.education + self.covert + self.diplomacy
+        )
 
     @model_validator(mode="after")
     def validate_budget(self) -> "InvestmentAllocation":
-        fields = [self.r_and_d, self.constellation, self.launch_capacity,
-                  self.commercial, self.influence_ops, self.education,
-                  self.covert, self.diplomacy]
+        fields = [
+            self.r_and_d, self.constellation, self.meo_deployment,
+            self.geo_deployment, self.cislunar_deployment,
+            self.launch_capacity, self.commercial, self.influence_ops,
+            self.education, self.covert, self.diplomacy,
+        ]
         if any(f < 0.0 for f in fields):
             raise ValueError("All investment allocations must be >= 0.0")
         t = self.total()
@@ -106,6 +124,11 @@ class FactionState(BaseModel):
     coalition_loyalty: float = 0.5
     deferred_returns: list[dict[str, Any]] = []
     private_victory_achieved: bool = False
+    # Per-faction victory metrics (updated each turn)
+    deterrence_score: float = 0.0
+    disruption_score: float = 0.0
+    market_share: float = 0.0
+    joint_force_effectiveness: float = 1.0
 
     def sda_level(self) -> float:
         # 0.0–1.0 based on sensor count; 12 sensors = ~0.5, 24 = ~1.0
@@ -130,6 +153,8 @@ class GameStateSnapshot(BaseModel):
     turn_log_summary: str = ""
     tension_level: float = 0.0
     debris_level: float = 0.0
+    joint_force_effectiveness: float = 1.0
+    incoming_threats: list[dict[str, Any]] = []  # kinetic approaches visible via SDA
 
 
 class CrisisEvent(BaseModel):
