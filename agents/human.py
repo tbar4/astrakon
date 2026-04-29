@@ -117,7 +117,19 @@ def _collect_operations() -> list[OperationalAction]:
 
 
 def _collect_response() -> ResponseDecision:
-    console.print("\n[bold]RESPONSE PHASE[/bold]")
+    response_table = Table(title="Response Options", show_header=True, header_style="bold")
+    response_table.add_column("Option")
+    response_table.add_column("Effect")
+    for option, desc in [
+        ("Escalate",         "Raise the crisis level — increases board tension, unlocks harder actions next turn"),
+        ("Retaliate",        "Target a specific faction with a punitive action (requires escalation)"),
+        ("Public statement", "Shape the narrative — can reduce tension or signal resolve to all actors"),
+        ("De-escalate",      "Say no to both — absorb the crisis, preserve coalition stability, accept short-term cost"),
+    ]:
+        response_table.add_row(option, desc)
+    console.print(response_table)
+    console.print("\n[bold]RESPONSE PHASE[/bold]\n")
+
     escalate = Confirm.ask("Escalate?", default=False)
     retaliate = False
     target = None
