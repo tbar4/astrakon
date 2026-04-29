@@ -1,5 +1,4 @@
 import pytest
-import aiosqlite
 from pathlib import Path
 from output.audit import AuditTrail
 from engine.state import Phase, Decision, InvestmentAllocation, CrisisEvent

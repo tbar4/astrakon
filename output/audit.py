@@ -40,13 +40,14 @@ class AuditTrail:
     async def close(self):
         if self._conn:
             await self._conn.close()
+            self._conn = None
 
     def _rationale(self, decision: Decision) -> str:
-        if decision.investment:
+        if decision.investment is not None:
             return decision.investment.rationale
-        if decision.response:
+        if decision.response is not None:
             return decision.response.rationale
-        if decision.operations:
+        if decision.operations is not None:
             return "; ".join(a.rationale for a in decision.operations)
         return ""
 
