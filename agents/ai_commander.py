@@ -92,6 +92,7 @@ def _parse_snapshot_to_user_message(snapshot: GameStateSnapshot, phase: Phase) -
     lines = [
         f"TURN {snapshot.turn} — PHASE: {phase.value.upper()}",
         f"BUDGET: {fs.current_budget} points",
+        f"BOARD TENSION: {snapshot.tension_level:.0%} | DEBRIS FIELD: {snapshot.debris_level:.0%}",
         "",
         "YOUR ASSETS:",
         f"  LEO nodes: {assets.leo_nodes} | MEO: {assets.meo_nodes} | GEO: {assets.geo_nodes}",
@@ -106,7 +107,7 @@ def _parse_snapshot_to_user_message(snapshot: GameStateSnapshot, phase: Phase) -
     lines.append("")
     lines.append("AVAILABLE ACTIONS: " + ", ".join(snapshot.available_actions))
     if snapshot.turn_log_summary:
-        lines += ["", "LAST TURN SUMMARY:", snapshot.turn_log_summary]
+        lines += ["", "LAST TURN EVENTS:", snapshot.turn_log_summary]
     return "\n".join(lines)
 
 

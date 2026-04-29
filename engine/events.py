@@ -70,15 +70,41 @@ class CrisisEventLibrary:
             raise ValueError(f"Unknown event library: {library_name}")
 
     def generate_events(
-        self, tension_level: float, affected_factions: list[str], turn: int
+        self,
+        tension_level: float,
+        affected_factions: list[str],
+        turn: int,
+        prev_ops: list[str] | None = None,
     ) -> list[CrisisEvent]:
-        """Generate 0–2 crisis events weighted by board tension."""
+        """Generate 0–2 crisis events weighted by board tension and prior operations."""
         eligible = [e for e in self._events if e["min_tension"] <= tension_level]
         if not eligible:
             return []
-        weights = [0.2, 0.5, 0.3] if tension_level > 0.5 else [0.4, 0.5, 0.1]
-        count = random.choices([0, 1, 2], weights=weights)[0]
-        selected = random.sample(eligible, min(count, len(eligible)))
+
+        # Bias event pool when kinetic strikes occurred last turn
+        kinetic_last_turn = prev_ops and any(
+            op in prev_ops for op in ("kinetic_strike", "deniable_strike")
+        )
+        if kinetic_last_turn:
+            # Force at least one attribution/ASAT event when strikes happened
+            priority_types = {"asat_test", "attribution_crisis", "proxy_conflict"}
+            priority = [e for e in eligible if e["event_type"] in priority_types]
+            others = [e for e in eligible if e["event_type"] not in priority_types]
+            # Guarantee count >= 1 when there were strikes
+            weights = [0.1, 0.5, 0.4] if tension_level > 0.5 else [0.2, 0.5, 0.3]
+            count = max(1, random.choices([0, 1, 2], weights=weights)[0])
+            selected = []
+            if priority:
+                selected.append(random.choice(priority))
+                if count > 1 and others:
+                    selected.append(random.choice(others))
+            else:
+                selected = random.sample(eligible, min(count, len(eligible)))
+        else:
+            weights = [0.2, 0.5, 0.3] if tension_level > 0.5 else [0.4, 0.5, 0.1]
+            count = random.choices([0, 1, 2], weights=weights)[0]
+            selected = random.sample(eligible, min(count, len(eligible)))
+
         return [
             CrisisEvent(
                 event_id=f"{e['event_id']}_t{turn}",

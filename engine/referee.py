@@ -53,6 +53,11 @@ class GameReferee:
             for cid, c in scenario.coalitions.items()
         }
         self.tension_level: float = 0.2
+        self.debris_level: float = 0.0
+        self._turn_log: list[str] = []
+        self._turn_log_summary: str = ""
+        self._coordination_bonuses: dict[str, float] = {}
+        self._prev_turn_ops: list[str] = []
         self._current_turn: int = 0
         # Track dominance at start of game to detect in-game changes
         self._initial_dominance: dict[str, float] = {}
@@ -184,7 +189,7 @@ class GameReferee:
             color = "green" if dominance >= threshold else "red"
             dom_table.add_row(cid, member_names, pct, f"[{color}]{gap}[/{color}]")
         _console.print(dom_table)
-        _console.print(f"  [dim]Board tension: {self.tension_level:.0%}[/dim]\n")
+        _console.print(f"  [dim]Board tension: {self.tension_level:.0%}  |  Debris field: {self.debris_level:.0%}[/dim]\n")
 
     def _replenish_budgets(self, turn: int):
         for fs in self.faction_states.values():
@@ -211,6 +216,7 @@ class GameReferee:
         coalition_id = fs.coalition_id
         ally_states = {}
         adversary_estimates = {}
+        effective_sda = min(fs.sda_level() + self._coordination_bonuses.get(faction_id, 0.0), 1.0)
         for fid, other_fs in self.faction_states.items():
             if fid == faction_id:
                 continue
@@ -219,7 +225,7 @@ class GameReferee:
             else:
                 adversary_estimates[fid] = self.sim.sda_filter.filter(
                     adversary_assets=other_fs.assets,
-                    observer_sda_level=fs.sda_level(),
+                    observer_sda_level=effective_sda,
                 )
         return GameStateSnapshot(
             turn=self._current_turn,
@@ -230,6 +236,9 @@ class GameReferee:
             adversary_estimates=adversary_estimates,
             coalition_states={cid: c.model_copy(deep=True) for cid, c in self.coalition_states.items()},
             available_actions=available_actions,
+            tension_level=self.tension_level,
+            debris_level=self.debris_level,
+            turn_log_summary=self._turn_log_summary,
         )
 
     async def _fallback_decision(
@@ -306,9 +315,93 @@ class GameReferee:
             Phase.OPERATIONS,
             ["task_assets", "coordinate", "gray_zone", "alliance_move", "signal"]
         )
+
+        self._turn_log = []
+        self._prev_turn_ops = []
+        self._coordination_bonuses = {}
+
         for fid, decision in decisions.items():
-            # TODO: resolve operational actions via ConflictResolver (post-POC)
+            if not decision.operations:
+                await self.audit.write_decision(turn=turn, decision=decision)
+                continue
+
+            fs = self.faction_states[fid]
+
+            for op in decision.operations:
+                target_fid = op.target_faction
+                target_fs = self.faction_states.get(target_fid) if target_fid else None
+                is_adversary = target_fs and target_fs.coalition_id != fs.coalition_id
+
+                if op.action_type == "task_assets":
+                    self._prev_turn_ops.append("task_assets")
+                    if target_fid and is_adversary:
+                        self._turn_log.append(
+                            f"{fs.name} tasked assets against {target_fs.name} (surveillance)"
+                        )
+
+                elif op.action_type == "gray_zone" and is_adversary:
+                    if fs.assets.asat_deniable > 0:
+                        result = self.sim.conflict_resolver.resolve_deniable_asat(
+                            attacker_assets=fs.assets,
+                            defender_sda_level=target_fs.sda_level(),
+                        )
+                        nodes_hit = min(result["nodes_destroyed"], target_fs.assets.leo_nodes)
+                        target_fs.assets.leo_nodes -= nodes_hit
+                        fs.assets.asat_deniable -= 1
+                        self.debris_level = min(self.debris_level + 0.05 * nodes_hit, 1.0)
+                        self._prev_turn_ops.append("deniable_strike")
+                        detected = result["detected"]
+                        attributed = result["attributed"]
+                        suffix = (
+                            f" ({'attributed to ' + fs.name if attributed else 'detected, source unclear'})"
+                            if detected else " (undetected)"
+                        )
+                        self._turn_log.append(
+                            f"{fs.name} gray-zone op vs {target_fs.name}: "
+                            f"{nodes_hit} nodes disrupted{suffix}"
+                        )
+                    elif fs.assets.ew_jammers > 0:
+                        self._prev_turn_ops.append("gray_zone")
+                        self._turn_log.append(
+                            f"{fs.name} EW jamming ops against {target_fs.name}"
+                        )
+                    else:
+                        self._prev_turn_ops.append("gray_zone")
+                        self._turn_log.append(
+                            f"{fs.name} attempted gray-zone ops against {target_fs.name} — no deniable assets available"
+                        )
+
+                elif op.action_type == "coordinate" and target_fid:
+                    self._prev_turn_ops.append("coordinate")
+                    is_ally = target_fs and target_fs.coalition_id == fs.coalition_id
+                    if is_ally:
+                        self._coordination_bonuses[fid] = self._coordination_bonuses.get(fid, 0.0) + 0.1
+                        self._coordination_bonuses[target_fid] = (
+                            self._coordination_bonuses.get(target_fid, 0.0) + 0.1
+                        )
+                        self._turn_log.append(
+                            f"{fs.name} coordinated with {target_fs.name} (+SDA next turn)"
+                        )
+                    else:
+                        self._turn_log.append(
+                            f"{fs.name} attempted coordination with non-ally {target_fid} — ignored"
+                        )
+
+                else:
+                    self._prev_turn_ops.append(op.action_type)
+
             await self.audit.write_decision(turn=turn, decision=decision)
+
+        self._turn_log_summary = self._build_turn_log_summary(turn)
+
+    def _build_turn_log_summary(self, turn: int) -> str:
+        if not self._turn_log:
+            return ""
+        entries = "\n".join(f"  • {e}" for e in self._turn_log)
+        summary = f"Turn {turn} operations:\n{entries}"
+        if self.debris_level > 0:
+            summary += f"\nCumulative debris field: {self.debris_level:.0%}"
+        return summary
 
     async def _run_response_phase(self, turn: int):
         all_factions = list(self.faction_states.keys())
@@ -316,6 +409,7 @@ class GameReferee:
             tension_level=self.tension_level,
             affected_factions=all_factions,
             turn=turn,
+            prev_ops=self._prev_turn_ops,
         )
         for event in events:
             await self.audit.write_event(turn=turn, event=event)

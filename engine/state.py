@@ -128,6 +128,8 @@ class GameStateSnapshot(BaseModel):
     coalition_states: dict[str, CoalitionState]
     available_actions: list[str]
     turn_log_summary: str = ""
+    tension_level: float = 0.0
+    debris_level: float = 0.0
 
 
 class CrisisEvent(BaseModel):
