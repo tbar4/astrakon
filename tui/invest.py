@@ -53,7 +53,7 @@ def _output_str(cat: str, pts: int) -> str:
 
 
 def _budget_bar(allocated: float) -> Text:
-    filled = round(allocated * 20)
+    filled = min(20, max(0, round(allocated * 20)))
     bar = "█" * filled + "░" * (20 - filled)
     color = "red" if allocated > 1.0 else ("yellow" if allocated >= 0.8 else "green")
     t = Text()

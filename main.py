@@ -29,7 +29,7 @@ def _select_scenario() -> Path:
     return scenarios[choice]
 
 
-def _configure_agents(scenario, persona_dir: Path = Path("personas"), header=None) -> dict:
+def _configure_agents(scenario, persona_dir: Path = Path("personas")) -> dict:
     from agents.rule_based import MahanianAgent
     from agents.ai_commander import AICommanderAgent
     from agents.human import HumanAgent
@@ -61,7 +61,7 @@ def _configure_agents(scenario, persona_dir: Path = Path("personas"), header=Non
                 yaml.dump(archetype_data, buf)
                 advisor = AICommanderAgent(persona_yaml=buf.getvalue())
                 advisor.initialize(faction)
-            agent = HumanAgent(advisor=advisor, header=header)
+            agent = HumanAgent(advisor=advisor)
         else:  # ai_commander
             yaml = YAML()
             buf = io.StringIO()
@@ -145,7 +145,7 @@ async def main():
     from tui.header import GameHeader
     header = GameHeader(scenario.name, scenario.turns)
 
-    agents = _configure_agents(scenario, header=header)
+    agents = _configure_agents(scenario)
 
     from output.audit import AuditTrail
     from output.strategy_lib import StrategyLibrary

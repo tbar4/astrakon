@@ -3,7 +3,6 @@ from typing import Optional
 from rich.prompt import Confirm
 from agents.base import AgentInterface
 from engine.state import Phase, Decision
-from tui.header import NullGameHeader
 from tui.phases import display_situation, display_recommendation, collect_operations, collect_response
 from tui.invest import collect_investment
 
@@ -11,10 +10,9 @@ from tui.invest import collect_investment
 class HumanAgent(AgentInterface):
     is_human: bool = True
 
-    def __init__(self, advisor: Optional[AgentInterface] = None, header=None):
+    def __init__(self, advisor: Optional[AgentInterface] = None):
         super().__init__()
         self._advisor = advisor
-        self._header = header if header is not None else NullGameHeader()
 
     async def submit_decision(self, phase: Phase) -> Decision:
         # Guard: receive_state should always be called first, but fall back if not
