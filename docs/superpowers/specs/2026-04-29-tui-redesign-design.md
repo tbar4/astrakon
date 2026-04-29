@@ -2,40 +2,42 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Replace the current scrolling Rich output with a hybrid TUI — a persistent status header (Rich Live) always visible at the top, a full non-destructive investment allocation table, and a paged end-of-turn summary with forwards/backwards navigation.
+**Goal:** Replace the current scrolling Rich output with a hybrid TUI — a phase banner printed at the top of each phase showing live game state, a full non-destructive investment allocation table with live in-place updates, and a paged end-of-turn summary with forwards/backwards navigation.
 
-**Architecture:** New `tui/` module with four focused files. `agents/human.py` and `engine/referee.py` delegate display and input collection to `tui/`. No new library dependencies — all built on Rich (Live, Table, Panel, Prompt).
+**Architecture:** New `tui/` module with five focused files. `agents/human.py` and `engine/referee.py` delegate display and input collection to `tui/`. No new library dependencies — all built on Rich (Live, Table, Panel, Prompt, Rule).
 
-**Tech Stack:** Python, Rich (Live, Layout, Table, Panel, Prompt, Confirm), existing engine/state types.
+**Tech Stack:** Python, Rich (Live, Table, Panel, Prompt, Confirm, Rule), existing engine/state types.
 
 ---
 
 ## Design Decisions
 
-### Paradigm: Rich Live hybrid (C)
-Sticky status bar rendered via `rich.live.Live` at the top of the terminal. All game events, prompts, and phase output scroll below it as normal console output. The Live region is updated at the start of each phase (turn number, tension, dominance).
+### Paradigm: Phase banner + Rich Live for interactive widgets (revised from C)
 
-Rich Live and `Prompt.ask` can conflict — the Live context must be stopped before any input prompt is displayed and restarted after. The `GameHeader` class manages this with explicit `start()` / `stop()` / `refresh()` methods so callers control the lifecycle cleanly.
+A styled banner is printed once at the top of each phase showing turn, tension, debris, and coalition dominance bars. This is a plain `console.print()` — not Rich Live — which means it scrolls with the terminal naturally. Between phase banners, game events and AI deliberation output scroll below.
 
-**Header lifecycle ownership:** `HumanAgent` receives the `GameHeader` instance at construction and calls `header.stop()` at the top of `submit_decision()` (before any display or prompt) and `header.start()` at the bottom (after input is collected). `TurnSummary.display()` requires the header to already be stopped by its caller (`GameReferee._display_turn_summary()`) before invoking `display()`, and the caller restarts it after. `GameReferee.__init__` gains an optional `header: GameHeader | None = None` parameter; when `None`, no header lifecycle calls are made (AI-only games).
+Rich Live is used **only inside the investment table edit loop** where in-place updating is genuinely needed. Outside that loop, everything is normal console output. This eliminates the fragile start/stop lifecycle complexity that a "pinned header" would require.
 
-### Investment Phase: Full table, edit by number (B)
-All 11 categories displayed at once in a Rich Table. Each row shows: row number, category name, current allocation %, points spent, and projected output (node gains or descriptive effect). A budget progress bar above the table updates after each edit. The player types a row number to edit, enters a new fraction (validated 0.0–1.0, capped to remaining budget), then types `done` to proceed to rationale entry. They can edit any row any number of times before committing — no destructive sequential flow.
+**Why not Rich Live for the header:** Rich Live renders at the cursor position and updates in place at that position — it does not float above scrolling content. A true pinned-to-top bar requires either `screen=True` (full alternate screen, no scroll history) or raw ANSI escape codes. Neither fits this project.
 
-### End-of-Turn Summary: Paged with bidirectional navigation (B)
-Five fixed sections rendered in order:
-1. Crisis Events
-2. Operational Log
-3. Observed Operations & Faction Responses
-4. Orbital Dominance
-5. Faction Metrics
+### Investment Phase: Full table, edit by number, with Live in-place update
 
-Each section is rendered to a string buffer and stored in a list. The player navigates with:
-- `Enter` — next section
+All 11 categories displayed at once in a Rich Table wrapped in a `rich.live.Live` context. The Live context is **stopped only during the row-edit prompt** (so input can be collected), then restarted after the value is applied. This means exactly one copy of the table exists in the terminal at all times — no stacking.
+
+Each row shows: row number, category name, current allocation %, points spent, and projected output. A budget progress bar above the table updates after each edit.
+
+**Re-edit "remaining" definition:** When editing a row that already has a value, `remaining = 1.0 - sum(allocations for all OTHER rows)`. The current row's old value is freed before applying the new one.
+
+### End-of-Turn Summary: Paged with bidirectional navigation
+
+Sections are built dynamically — a section function returns `None` if there is nothing to show (e.g., no crisis events). The nav bar shows `page X/N` where N is the count of non-empty sections, not a fixed 5.
+
+Navigation:
+- `Enter` — next section (or finish on last)
 - `b` + `Enter` — previous section (no-op on section 1)
 - `q` + `Enter` — skip to end
 
-Every section displays a navigation bar at the bottom: `[Enter] next  [b] back  [q] skip to end  page X/5`. On section 1, `[b] back` is dimmed. On section 5, `[Enter] next` changes to `[Enter] continue to Turn N+1`.
+Every section displays the nav bar at the bottom. On section 1, `[b] back` is dimmed. On the last section, `[Enter]` label changes to `[Enter] continue to Turn N+1`.
 
 ---
 
@@ -43,82 +45,132 @@ Every section displays a navigation bar at the bottom: `[Enter] next  [b] back  
 
 **New files:**
 - `tui/__init__.py` — empty
-- `tui/header.py` — `GameHeader` class
-- `tui/invest.py` — `InvestmentTable` function
-- `tui/phases.py` — `collect_operations()`, `collect_response()` styled replacements
+- `tui/header.py` — `print_phase_banner()` and `NullGameHeader` / `GameHeader`
+- `tui/invest.py` — `collect_investment()` with Rich Live table
+- `tui/phases.py` — `display_situation()`, `collect_operations()`, `collect_response()`
 - `tui/summary.py` — `TurnSummary` class
 
 **Modified files:**
-- `agents/human.py` — replace `_display_snapshot`, `_collect_investment`, `_collect_operations`, `_collect_response`, `_display_recommendation` with imports from `tui/`; `HumanAgent.__init__` gains `header: GameHeader | None = None` param
-- `engine/referee.py` — `GameReferee.__init__` gains `header: GameHeader | None = None`; replace `_display_turn_summary()` body with `header.stop()` + `TurnSummary(...).display()` + `header.start()`; call `header.refresh(...)` at the top of each phase
-- `main.py` — instantiate `GameHeader(scenario.name, scenario.turns)` after scenario is loaded; call `header.stop()` before `_configure_agents()` prompt loop; pass `header` to `GameReferee` and to each `HumanAgent`
+- `agents/human.py` — replace all display/input functions with imports from `tui/`; `HumanAgent.__init__` gains `header: GameHeader = NullGameHeader()`
+- `engine/referee.py` — call `header.print_phase_banner(...)` at the top of each phase; replace `_display_turn_summary()` body with `TurnSummary(...).display()`; `GameReferee.__init__` gains `header: GameHeader = NullGameHeader()`
+- `main.py` — instantiate `GameHeader(scenario.name, scenario.turns)` after scenario loads; pass to `GameReferee` and each `HumanAgent`
 
 ---
 
 ## Component Specifications
 
-### `tui/header.py` — `GameHeader`
+### `tui/header.py` — `GameHeader` and `NullGameHeader`
 
-Renders a single-line status bar using `rich.live.Live` wrapping a `rich.table.Table` with no borders:
+`GameHeader` and `NullGameHeader` share the same interface. `NullGameHeader` is the default — all methods are no-ops. Callers never check for `None`.
 
-```
-ASTRAKON  │  Cislunar Crossroads  │  Turn 4/12  │  artemis ████████░░ 62.4%  │  ascent █████░░░░░ 37.6%  │  TENSION 45%  DEBRIS 12%
-```
-
-Public interface:
 ```python
 class GameHeader:
     def __init__(self, scenario_name: str, total_turns: int): ...
-    def start(self): ...         # begin Live rendering
-    def stop(self): ...          # stop Live, safe to print/prompt
-    def refresh(self,            # update all fields
+
+    def print_phase_banner(
+        self,
         turn: int,
         tension: float,
         debris: float,
-        coalition_dominance: dict[str, float],   # cid -> float
+        coalition_dominance: dict[str, float],   # cid -> float, ordered
+        coalition_colors: dict[str, str],         # cid -> Rich color name
         phase: str,
     ): ...
+
+class NullGameHeader:
+    def __init__(self): ...
+    def print_phase_banner(self, *args, **kwargs): ...  # no-op
 ```
 
-Dominance bars: 10-char block bar (`█` filled, `░` empty) scaled to the value. Color: green if coalition is leading, red if trailing.
+`print_phase_banner()` prints a single Rich `Rule` or `Panel` line:
 
-`GameReferee` holds an optional `GameHeader` reference. It calls `header.refresh(...)` at the top of each phase and `header.stop()` / `header.start()` around `TurnSummary.display()`. `HumanAgent` holds its own reference and manages stop/start around its own prompts.
+```
+══ TURN 4/12 · INVEST ══  artemis ████████░░ 62.4%  │  ascent █████░░░░░ 37.6%  │  TENSION 45%  DEBRIS 12%
+```
+
+Dominance bars: 10-char block bar (`█` filled, `░` empty) scaled to the dominance value. Colors are passed in from the caller — derived by coalition index (first coalition in scenario dict = `green`, second = `red`), never hardcoded by name.
 
 ### `tui/invest.py` — `collect_investment(budget: int, snapshot: GameStateSnapshot) -> InvestmentAllocation`
 
-Renders a Rich Table with columns: `#`, `Category`, `Alloc %`, `Pts`, `Output`.
-
-Budget progress bar above table (Rich text, not a separate widget):
-```
-[ ████████░░░░░░░░░░░░ ]  42% allocated  |  51 pts remaining  |  budget: 120 pts
-```
+Node cost constants imported from `engine.simulation` (`LEO_NODE_COST`, `MEO_NODE_COST`, `GEO_NODE_COST`, `CISLUNAR_NODE_COST`, `LAUNCH_COST`, `JAMMER_COST`, `DENIABLE_ASAT_COST`). The output column stays correct if game balance changes.
 
 Output column values per category:
-- `constellation` → `+N LEO nodes` (floor(pts / 5))
-- `meo_deployment` → `+N MEO nodes` (floor(pts / 12))
-- `geo_deployment` → `+N GEO nodes` (floor(pts / 25))
-- `cislunar_deployment` → `+N cislunar nodes` (floor(pts / 40))
-- `launch_capacity` → `+N capacity` (floor(pts / 15))
-- `influence_ops` → `+N EW jammers` (floor(pts / 12))
-- `covert` → `+N deniable ASAT` (floor(pts / 25))
+- `constellation` → `+N LEO nodes` (`floor(pts / LEO_NODE_COST)`)
+- `meo_deployment` → `+N MEO nodes` (`floor(pts / MEO_NODE_COST)`)
+- `geo_deployment` → `+N GEO nodes` (`floor(pts / GEO_NODE_COST)`)
+- `cislunar_deployment` → `+N cislunar` (`floor(pts / CISLUNAR_NODE_COST)`)
+- `launch_capacity` → `+N capacity` (`floor(pts / LAUNCH_COST)`)
+- `influence_ops` → `+N EW jammers` (`floor(pts / JAMMER_COST)`)
+- `covert` → `+N deniable ASAT` (`floor(pts / DENIABLE_ASAT_COST)`)
 - `r_and_d` → `deferred return T+3`
 - `education` → `deferred return T+6`
 - `commercial` → `revenue + influence`
 - `diplomacy` → `coalition loyalty +`
 
-Edit loop:
+Budget progress bar:
 ```
-> edit # (or 'done'):
+[ ████████░░░░░░░░░░░░ ]  42% allocated  |  51 pts remaining  |  budget: 120 pts
 ```
-Input `1`–`11` → prompt `  constellation (current: 30%, remaining: 58%): ` → validate float, cap to remaining, update table and bar, re-render. Input `done` → prompt for rationale → return `InvestmentAllocation`.
+Bar color: green when ≤80% allocated, yellow when 80–99%, red at 100%.
 
-Validation: non-numeric input prints `[red]Enter a number 1–11 or 'done'.[/red]` and re-prompts. Fraction > remaining is silently capped and noted: `[yellow]Capped to 0.48 (remaining budget).[/yellow]`.
+**Edit loop (Live-wrapped):**
 
-### `tui/phases.py` — `collect_operations()` and `collect_response()`
+```python
+allocations: dict[str, float] = {cat: 0.0 for cat in CATEGORIES}
+with Live(get_renderable=lambda: _render_table(allocations, budget), refresh_per_second=4) as live:
+    while True:
+        live.stop()
+        raw = Prompt.ask("> edit # (or 'done')")
+        live.start()
+        if raw.strip().lower() == 'done':
+            break
+        try:
+            idx = int(raw.strip()) - 1
+            cat = CATEGORIES[idx]
+        except (ValueError, IndexError):
+            console.print("[red]Enter a number 1–11 or 'done'.[/red]")
+            continue
+        remaining = 1.0 - sum(v for k, v in allocations.items() if k != cat)
+        live.stop()
+        val = float(Prompt.ask(f"  {cat} (current: {allocations[cat]:.0%}, remaining: {remaining:.0%})", default=str(round(allocations[cat], 3))))
+        live.start()
+        if val > remaining:
+            console.print(f"[yellow]Capped to {remaining:.3f} (remaining budget).[/yellow]")
+            val = remaining
+        allocations[cat] = round(max(0.0, val), 3)
 
-`collect_operations(snapshot: GameStateSnapshot) -> list[OperationalAction]`: Same logic as current `_collect_operations()` in `human.py` but with richer table styling — color-coded action rows (gray_zone=yellow, task_assets=blue, coordinate=cyan, alliance_move/signal=dim). Mission sub-menu for `task_assets` unchanged.
+live.stop()
+rationale = Prompt.ask("  Strategic rationale")
+return InvestmentAllocation(**allocations, rationale=rationale)
+```
 
-`collect_response(snapshot: GameStateSnapshot) -> ResponseDecision`: Same logic as current `_collect_response()` but prefixes the prompt with `snapshot.turn_log_summary` so the player sees what happened this turn without scrolling up.
+### `tui/phases.py` — `display_situation()`, `collect_operations()`, `collect_response()`
+
+**`display_situation(snapshot: GameStateSnapshot)`**
+
+Replaces `_display_snapshot()` in `human.py`. Shows:
+1. Assets table — all asset types with current counts (LEO, MEO, GEO, cislunar, ASAT-K, ASAT-deniable, EW jammers, SDA sensors, launch capacity)
+2. Adversary estimates table — SDA-filtered intel on each adversary (LEO, MEO, GEO, cislunar, ASAT-K)
+3. Incoming threats panel (if `snapshot.incoming_threats` is non-empty) — red warning box listing kinetic approaches with attacker and declared turn
+4. Key metrics line — deterrence, disruption, market share, JFE for this faction
+
+**`collect_operations(snapshot: GameStateSnapshot) -> list[OperationalAction]`**
+
+Same logic as current `_collect_operations()` in `human.py`. Richer table styling: color-coded action rows (`gray_zone`=yellow, `task_assets`=blue, `coordinate`=cyan, `alliance_move`/`signal`=dim). Mission sub-menu for `task_assets` unchanged.
+
+**`collect_response(snapshot: GameStateSnapshot) -> ResponseDecision`**
+
+Same logic as current `_collect_response()`. Prefixes the prompt with `snapshot.turn_log_summary` in a dim panel so the player sees what happened this turn without scrolling up. If `turn_log_summary` is empty, skips the prefix.
+
+### Advisor recommendation display
+
+`_display_recommendation()` in `human.py` currently dumps raw JSON. Replace with a structured Rich Panel:
+
+- **INVEST phase:** Show top 3 non-zero allocations sorted by fraction, rendered as a mini bar list (`constellation 35% ███░░`) + rationale text below. Extract from `rec.top_recommendation.investment`.
+- **OPERATIONS phase:** Show `action_type → target_faction` on one line + rationale below. Extract from `rec.top_recommendation.operations[0]`.
+- **RESPONSE phase:** Show escalate/retaliate as colored flags (`[red]ESCALATE[/red]` or `[green]stand down[/green]`) + rationale below. Extract from `rec.top_recommendation.response`.
+
+No JSON visible to the player.
 
 ### `tui/summary.py` — `TurnSummary`
 
@@ -132,6 +184,7 @@ class TurnSummary:
         decisions: list[dict],
         faction_states: dict[str, FactionState],
         coalition_states: dict[str, CoalitionState],
+        coalition_colors: dict[str, str],
         dominance: dict[str, float],
         victory_threshold: float,
     ): ...
@@ -139,50 +192,59 @@ class TurnSummary:
     def display(self): ...  # blocks until player finishes paging
 ```
 
-`display()` builds 5 section strings (using Rich's `Console(record=True)` to capture rendered output), then runs the navigation loop:
+`display()` builds sections dynamically:
 
 ```python
-sections = [_section_crisis(...), _section_ops_log(...), _section_observed_ops(...),
-            _section_dominance(...), _section_metrics(...)]
-idx = 0
-while True:
-    _print_section(sections[idx], idx, len(sections), is_last_turn=...)
-    key = input()  # raw input — header is stopped before this
-    if key.strip() == 'b' and idx > 0:
-        idx -= 1
-    elif key.strip() == 'q':
-        break
-    elif idx < len(sections) - 1:
-        idx += 1
-    else:
-        break  # past last section
+candidates = [
+    _section_crisis(self.events),
+    _section_ops_log(self.turn_log),
+    _section_observed_ops(self.decisions, self.faction_states),
+    _section_dominance(self.dominance, self.coalition_states, self.coalition_colors, self.victory_threshold),
+    _section_metrics(self.faction_states),
+]
+sections = [s for s in candidates if s is not None]
 ```
 
-Nav bar (rendered at bottom of each section):
-- Section 1: `[Enter] next  [dim][b] back[/dim]  [q] skip to end  page 1/5`
-- Middle: `[Enter] next  [b] back  [q] skip to end  page N/5`
-- Last: `[Enter] continue to Turn N+1  [b] back  page 5/5`
+Each `_section_*` function returns a `str` (Rich markup rendered via `Console(record=True).export_text()`) or `None` if empty. A section is empty when: crisis list is empty, turn_log is empty, no observable ops/responses exist.
 
-### Advisor recommendation display
+Navigation loop:
 
-`_display_recommendation()` in `human.py` currently dumps raw JSON. Replace with a structured panel:
+```python
+idx = 0
+n = len(sections)
+while True:
+    console.print(sections[idx])
+    _print_nav_bar(idx, n, self.turn, self.total_turns)
+    key = Prompt.ask("", default="").strip().lower()
+    if key == 'b' and idx > 0:
+        idx -= 1
+    elif key == 'q':
+        break
+    elif idx < n - 1:
+        idx += 1
+    else:
+        break
+```
 
-- For INVEST phase: show top 3 non-zero allocations as a mini bar list + rationale text
-- For OPERATIONS phase: show `action_type → target` + rationale
-- For RESPONSE phase: show escalate/retaliate flags + rationale
+Nav bar per position:
+- First section: `[Enter] next  [dim][b] back[/dim]  [q] skip to end  page 1/N`
+- Middle: `[Enter] next  [b] back  [q] skip to end  page X/N`
+- Last: `[Enter] continue to Turn M  [b] back  page N/N`
 
-No JSON visible to the player.
+Using `Prompt.ask("", default="")` instead of raw `input()` prevents character echo from appearing before the next section renders.
 
 ---
 
 ## Color Scheme
 
+Coalition colors are assigned by **index** in `scenario.coalitions` (dict iteration order), not by name. First coalition → `green`, second → `red`. Passed as `coalition_colors: dict[str, str]` wherever needed.
+
 | Element | Color |
 |---|---|
-| Header bar background | `#161b22` (Rich `on grey7`) |
-| Header border | `cyan` |
-| Artemis coalition | `green` |
-| Ascent coalition | `red` |
+| Phase banner rule | `cyan` |
+| Phase label | `bold cyan` |
+| First coalition (by index) | `green` |
+| Second coalition (by index) | `red` |
 | Crisis events | `yellow` |
 | Kinetic/retaliation | `bold red` |
 | Gray-zone/jamming | `yellow` |
@@ -190,9 +252,10 @@ No JSON visible to the player.
 | Neutral ops | `dim` |
 | Tension | `yellow` |
 | Debris | `orange3` |
-| Budget bar (healthy) | `green` |
-| Budget bar (>80% spent) | `yellow` |
-| Budget bar (100% spent) | `red` |
+| Budget bar ≤80% | `green` |
+| Budget bar 80–99% | `yellow` |
+| Budget bar 100% | `red` |
+| Incoming threat warning | `bold red` on `red` panel |
 
 ---
 
@@ -210,7 +273,11 @@ No JSON visible to the player.
 ## Testing
 
 TUI components are display-only and not unit-tested. Verify manually by running a `human+advisor` game with the `cislunar_crossroads` scenario and confirming:
-1. Header updates correctly each phase
-2. Investment table allows free editing and correct node projections
-3. Paged summary navigates forwards and backwards correctly
-4. Advisor panel shows no raw JSON
+1. Phase banner appears at the top of each phase with correct turn, tension, dominance
+2. Investment table stays in place during edits — no stacking copies in scroll history
+3. Re-editing a row correctly frees the old value before applying the new one
+4. Projected node outputs match actual game outcomes
+5. Paged summary navigates forwards and backwards; empty sections are skipped
+6. `page X/N` counter reflects actual section count, not a fixed 5
+7. Advisor panel shows no raw JSON
+8. Situation display shows assets, adversary intel, and incoming threats
