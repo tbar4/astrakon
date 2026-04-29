@@ -334,7 +334,7 @@ class GameReferee:
             await self.audit.write_decision(turn=turn, decision=decision)
 
     def _check_victory(self) -> Optional[str]:
-        if self._current_turn < 2:
+        if self._current_turn < 4:
             return None
         all_assets = {fid: fs.assets for fid, fs in self.faction_states.items()}
         for cid, coalition in self.coalition_states.items():

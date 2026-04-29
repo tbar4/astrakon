@@ -71,7 +71,7 @@ factions:
       launch_capacity: 2
 
 victory:
-  coalition_orbital_dominance: 0.65
+  coalition_orbital_dominance: 0.82
   individual_conditions_required: true
   individual_conditions:
     ussf:
