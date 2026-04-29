@@ -149,6 +149,16 @@ class AICommanderAgent(AgentInterface):
         self._model = model
         self._client = anthropic.Anthropic()
         self._system_prompt = _build_system_prompt(self._persona)
+        self._token_totals = {
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "cache_read_tokens": 0,
+            "cache_creation_tokens": 0,
+        }
+
+    @property
+    def token_totals(self) -> dict:
+        return dict(self._token_totals)
 
     def _build_decision(self, phase: Phase, inp: dict) -> Decision:
         if phase == Phase.INVEST:
@@ -191,7 +201,7 @@ class AICommanderAgent(AgentInterface):
         )
 
     async def _call_claude(self, user_message: str, phase: Phase):
-        return await asyncio.to_thread(
+        response = await asyncio.to_thread(
             self._client.messages.create,
             model=self._model,
             max_tokens=1024,
@@ -204,6 +214,12 @@ class AICommanderAgent(AgentInterface):
             tools=PHASE_TOOLS[phase],
             tool_choice={"type": "any"},
         )
+        u = response.usage
+        self._token_totals["input_tokens"] += u.input_tokens
+        self._token_totals["output_tokens"] += u.output_tokens
+        self._token_totals["cache_read_tokens"] += getattr(u, "cache_read_input_tokens", 0)
+        self._token_totals["cache_creation_tokens"] += getattr(u, "cache_creation_input_tokens", 0)
+        return response
 
     async def submit_decision(self, phase: Phase) -> Decision:
         if self._last_snapshot is None:

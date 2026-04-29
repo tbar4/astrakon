@@ -34,6 +34,17 @@ class AuditTrail:
                 turn INTEGER, phase TEXT, faction_id TEXT,
                 snapshot_json TEXT, timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
             );
+            CREATE TABLE IF NOT EXISTS token_usage (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                faction_id TEXT,
+                role TEXT,
+                model TEXT,
+                input_tokens INTEGER DEFAULT 0,
+                output_tokens INTEGER DEFAULT 0,
+                cache_read_tokens INTEGER DEFAULT 0,
+                cache_creation_tokens INTEGER DEFAULT 0,
+                timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+            );
         """)
         await self._conn.commit()
 
@@ -116,3 +127,33 @@ class AuditTrail:
             "events": await self.get_events(),
             "divergences": await self.get_advisor_divergences(),
         }
+
+    async def write_token_usage(
+        self, faction_id: str, role: str, model: str, totals: dict
+    ):
+        await self._conn.execute(
+            "INSERT INTO token_usage "
+            "(faction_id, role, model, input_tokens, output_tokens, "
+            "cache_read_tokens, cache_creation_tokens) VALUES (?,?,?,?,?,?,?)",
+            (
+                faction_id, role, model,
+                totals.get("input_tokens", 0),
+                totals.get("output_tokens", 0),
+                totals.get("cache_read_tokens", 0),
+                totals.get("cache_creation_tokens", 0),
+            )
+        )
+        await self._conn.commit()
+
+    async def get_token_summary(self) -> list[dict]:
+        cursor = await self._conn.execute(
+            "SELECT faction_id, role, model, "
+            "SUM(input_tokens) as input_tokens, "
+            "SUM(output_tokens) as output_tokens, "
+            "SUM(cache_read_tokens) as cache_read_tokens, "
+            "SUM(cache_creation_tokens) as cache_creation_tokens "
+            "FROM token_usage GROUP BY faction_id, role, model "
+            "ORDER BY faction_id"
+        )
+        rows = await cursor.fetchall()
+        return [dict(r) for r in rows]

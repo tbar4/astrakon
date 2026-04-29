@@ -171,6 +171,59 @@ async def main():
         strategy_lib = StrategyLibrary()
         strategy_lib.record_run(scenario, result)
 
+        # Collect and log token usage from all AI agents (commanders + advisors)
+        from agents.ai_commander import AICommanderAgent
+        from rich.table import Table as RichTable
+
+        token_rows = []
+        for fid, agent in agents.items():
+            if isinstance(agent, AICommanderAgent):
+                await audit.write_token_usage(fid, "commander", agent._model, agent.token_totals)
+                token_rows.append((fid, "commander", agent._model, agent.token_totals))
+            if hasattr(agent, "_advisor") and isinstance(agent._advisor, AICommanderAgent):
+                await audit.write_token_usage(fid, "advisor", agent._advisor._model, agent._advisor.token_totals)
+                token_rows.append((fid, "advisor", agent._advisor._model, agent._advisor.token_totals))
+
+        if token_rows:
+            _COSTS = {
+                "claude-sonnet-4-6": {"input": 3.0, "output": 15.0, "cache_read": 0.30, "cache_creation": 3.75},
+                "claude-opus-4-7":   {"input": 15.0, "output": 75.0, "cache_read": 1.50, "cache_creation": 18.75},
+            }
+
+            def _estimate_cost(model: str, totals: dict) -> float:
+                rates = _COSTS.get(model, _COSTS["claude-sonnet-4-6"])
+                return (
+                    totals["input_tokens"] * rates["input"] / 1_000_000 +
+                    totals["output_tokens"] * rates["output"] / 1_000_000 +
+                    totals["cache_read_tokens"] * rates["cache_read"] / 1_000_000 +
+                    totals["cache_creation_tokens"] * rates["cache_creation"] / 1_000_000
+                )
+
+            console.print("\n[bold]TOKEN USAGE[/bold]")
+            tok_table = RichTable(show_header=True, header_style="bold", box=None, padding=(0, 2))
+            tok_table.add_column("Faction")
+            tok_table.add_column("Role")
+            tok_table.add_column("Model", style="dim")
+            tok_table.add_column("Input", justify="right")
+            tok_table.add_column("Output", justify="right")
+            tok_table.add_column("Cache-R", justify="right")
+            tok_table.add_column("Cache-W", justify="right")
+            tok_table.add_column("Est. Cost", justify="right")
+            total_cost = 0.0
+            for fid, role, model, totals in token_rows:
+                cost = _estimate_cost(model, totals)
+                total_cost += cost
+                tok_table.add_row(
+                    fid, role, model,
+                    f"{totals['input_tokens']:,}",
+                    f"{totals['output_tokens']:,}",
+                    f"{totals['cache_read_tokens']:,}",
+                    f"{totals['cache_creation_tokens']:,}",
+                    f"${cost:.4f}",
+                )
+            console.print(tok_table)
+            console.print(f"  [dim]Total estimated cost: ${total_cost:.4f}[/dim]")
+
         if Confirm.ask("\nGenerate after-action report?", default=True):
             from output.aar import AfterActionReportGenerator
             console.print("[dim]Generating AAR via Claude Opus...[/dim]")

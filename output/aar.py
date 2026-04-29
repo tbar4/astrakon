@@ -28,7 +28,7 @@ class AfterActionReportGenerator:
         response = await asyncio.to_thread(
             self._client.messages.create,
             model=self._model,
-            max_tokens=4096,
+            max_tokens=16000,
             system=AAR_SYSTEM,
             messages=[{
                 "role": "user",
