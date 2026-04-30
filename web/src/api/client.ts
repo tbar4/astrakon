@@ -70,6 +70,17 @@ export async function getResult(sessionId: string): Promise<unknown> {
   return json(await fetch(`${BASE}/game/${sessionId}/result`))
 }
 
+export interface HistoryData {
+  decisions: Array<{ id: number; turn: number; phase: string; faction_id: string; decision_json: string; rationale: string; timestamp: string }>
+  events: Array<{ id: number; turn: number; event_type: string; description: string; triggered_by: string; affected_factions: string; severity: number; timestamp: string }>
+  divergences: Array<{ id: number; turn: number; phase: string; faction_id: string; recommendation_json: string; final_decision_json: string; timestamp: string }>
+  token_summary: Array<{ faction_id: string; role: string; model: string; input_tokens: number; output_tokens: number; cache_read_tokens: number; cache_creation_tokens: number }>
+}
+
+export async function getHistory(sessionId: string): Promise<HistoryData> {
+  return json(await fetch(`${BASE}/game/${sessionId}/history`))
+}
+
 export async function generateAar(sessionId: string): Promise<string> {
   const body = await json<{ text: string }>(
     await fetch(`${BASE}/game/${sessionId}/aar`, { method: 'POST' }),

@@ -136,6 +136,24 @@ async def get_result(session_id: str):
     return state.result
 
 
+@router.get("/game/{session_id}/history")
+async def get_history(session_id: str):
+    state = await load_session(session_id)
+    if state is None:
+        raise HTTPException(status_code=404, detail="Session not found")
+    from output.audit import AuditTrail
+    audit = AuditTrail(f"output/game_audit_{session_id[:8]}.db")
+    try:
+        await audit.initialize()
+        log = await audit.get_full_game_log()
+        tokens = await audit.get_token_summary()
+        return {**log, "token_summary": tokens}
+    except Exception:
+        return {"decisions": [], "events": [], "divergences": [], "token_summary": []}
+    finally:
+        await audit.close()
+
+
 @router.post("/game/{session_id}/aar")
 async def generate_aar(session_id: str):
     state = await load_session(session_id)
@@ -143,7 +161,6 @@ async def generate_aar(session_id: str):
         raise HTTPException(status_code=404, detail="Session not found")
     from output.aar import AfterActionReportGenerator
     from output.audit import AuditTrail
-    from pathlib import Path
     gen = AfterActionReportGenerator()
     audit_path = f"output/game_audit_{state.session_id[:8]}.db"
     audit = AuditTrail(audit_path)

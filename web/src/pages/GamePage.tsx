@@ -1,5 +1,5 @@
 // web/src/pages/GamePage.tsx
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { advance, decide, getRecommendation } from '../api/client'
 import { useGameStore } from '../store/gameStore'
@@ -12,6 +12,7 @@ import TurnSummary from '../components/TurnSummary'
 import InvestPanel from '../components/phase/InvestPanel'
 import OpsPanel from '../components/phase/OpsPanel'
 import ResponsePanel from '../components/phase/ResponsePanel'
+import DecisionLog from '../components/DecisionLog'
 
 export default function GamePage() {
   const { sessionId } = useParams<{ sessionId: string }>()
@@ -22,6 +23,8 @@ export default function GamePage() {
     isLoading, error, showSummary,
     setGameState, setRecommendation, setLoading, setError, setShowSummary,
   } = useGameStore()
+
+  const [showLog, setShowLog] = useState(false)
 
   useEffect(() => {
     if (!sessionId || !gameState) return
@@ -101,13 +104,16 @@ export default function GamePage() {
         if (recommendation) setRecommendation(null)
       } else if (e.key === 'Enter') {
         if (showSummary) void handleNextTurn()
+      } else if (e.key === 'l' || e.key === 'L') {
+        setShowLog((v) => !v)
       } else if (e.key === 'Escape') {
-        navigate('/')
+        if (showLog) setShowLog(false)
+        else navigate('/')
       }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [isLoading, recommendation, showSummary]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [isLoading, recommendation, showSummary, showLog]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!gameState) {
     return (
@@ -149,8 +155,15 @@ export default function GamePage() {
         <span style={{ flex: 1 }} />
         <span className="mono" style={{ color: '#64748b', fontSize: 10 }}>{gameState.scenario_name}</span>
         <span className="mono" style={{ color: '#1e3a4a', fontSize: 9, letterSpacing: 1 }}>
-          [A] ACCEPT · [D] DISMISS · [↵] CONTINUE · [ESC] MENU
+          [A] ACCEPT · [D] DISMISS · [↵] CONTINUE · [L] LOG · [ESC] MENU
         </span>
+        <button
+          className="btn-primary"
+          onClick={() => setShowLog((v) => !v)}
+          style={{ fontSize: 10, padding: '2px 10px', borderColor: '#334155', color: '#64748b' }}
+        >
+          LOG
+        </button>
         <button
           className="btn-primary"
           onClick={() => navigate('/')}
@@ -253,6 +266,14 @@ export default function GamePage() {
       </div>
 
       {isLoading && <LoadingOverlay />}
+
+      {showLog && sessionId && (
+        <DecisionLog
+          sessionId={sessionId}
+          scenarioName={gameState.scenario_name}
+          onClose={() => setShowLog(false)}
+        />
+      )}
 
       {showSummary && (
         <TurnSummary
