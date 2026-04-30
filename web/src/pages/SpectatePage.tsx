@@ -4,8 +4,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { advance } from '../api/client'
 import type { GameState } from '../types'
 import type { TurnSnapshot } from '../store/gameStore'
-import OrbitalMap from '../components/OrbitalMap'
-import DominanceRail from '../components/DominanceRail'
+import MapTabContainer from '../components/MapTabContainer'
 
 const SPEEDS = [
   { label: '0.5×', ms: 6000 },
@@ -141,16 +140,19 @@ export default function SpectatePage() {
       {/* Two-panel layout */}
       <div style={{ flex: 1, display: 'flex', gap: 8, padding: 8, overflow: 'hidden', minHeight: 0 }}>
 
-        {/* LEFT: orbital map */}
+        {/* LEFT: map tab panel */}
         <div style={{ flex: 2, minHeight: 0 }}>
-          <OrbitalMap gameState={gameState} coalitionDominance={coalitionDominance} prevFactionStates={null} humanAdversaryEstimates={{}} />
+          <MapTabContainer
+            gameState={gameState}
+            coalitionDominance={coalitionDominance}
+            turnHistory={turnHistory}
+            prevFactionStates={null}
+            humanAdversaryEstimates={{}}
+          />
         </div>
 
-        {/* RIGHT: dominance + faction overview + ops log */}
+        {/* RIGHT: faction overview + ops log */}
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 8, minHeight: 0, overflow: 'hidden' }}>
-          <div style={{ flex: '0 1 auto', maxHeight: '50%', overflowY: 'auto', minHeight: 0 }}>
-            <DominanceRail gameState={gameState} coalitionDominance={coalitionDominance} turnHistory={turnHistory} />
-          </div>
 
           {/* All factions snapshot */}
           <div className="panel" style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
