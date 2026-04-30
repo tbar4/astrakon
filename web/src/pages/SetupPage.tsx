@@ -1,13 +1,13 @@
 // web/src/pages/SetupPage.tsx
-import { useState, useEffect } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { listScenarios, listSessions, createGame, getState, advance, generateAar } from '../api/client'
+import { listScenarios, listSessions, createGame, getState, advance, generateAar, getScenario, createScenario, updateScenario, deleteScenario } from '../api/client'
 import { useGameStore } from '../store/gameStore'
-import type { ScenarioSummary, SessionSummary, AgentConfig } from '../types'
+import type { ScenarioSummary, SessionSummary, AgentConfig, ScenarioDetail, ScenarioFactionDetail } from '../types'
 
-type Tab = 'NEW GAME' | 'SAVED GAMES' | 'AFTER ACTION REVIEWS'
+type Tab = 'NEW GAME' | 'SAVED GAMES' | 'AFTER ACTION REVIEWS' | 'SCENARIO EDITOR'
 
-const TABS: Tab[] = ['NEW GAME', 'SAVED GAMES', 'AFTER ACTION REVIEWS']
+const TABS: Tab[] = ['NEW GAME', 'SAVED GAMES', 'AFTER ACTION REVIEWS', 'SCENARIO EDITOR']
 
 const MONO: React.CSSProperties = { fontFamily: 'Courier New' }
 
@@ -305,6 +305,312 @@ function AARTab() {
   )
 }
 
+// ── Scenario Editor tab ───────────────────────────────────────────────────────
+const ARCHETYPES = ['mahanian', 'commercial_broker', 'gray_zone', 'rogue_accelerationist']
+const ASSET_KEYS = ['leo_nodes', 'meo_nodes', 'geo_nodes', 'cislunar_nodes', 'asat_kinetic', 'asat_deniable', 'ew_jammers', 'sda_sensors', 'launch_capacity'] as const
+const INPUT_S: React.CSSProperties = { background: '#020b18', border: '1px solid #00d4ff33', color: '#94a3b8', fontFamily: 'Courier New', fontSize: 11, borderRadius: 2, padding: '3px 6px' }
+
+function makeBlankFaction(): ScenarioFactionDetail {
+  return { faction_id: '', name: 'New Faction', archetype: 'mahanian', agent_type: 'rule_based', budget_per_turn: 100, coalition_id: '', coalition_loyalty: 0.5, starting_assets: { leo_nodes: 2 } }
+}
+
+function makeBlankDetail(): ScenarioDetail {
+  return {
+    name: 'New Scenario', description: '', turns: 12, turn_represents: '3 months',
+    factions: [makeBlankFaction()],
+    coalitions: {},
+    victory: { coalition_orbital_dominance: 0.65, individual_conditions_required: true, individual_conditions: {} },
+    crisis_events: { library: 'default_2030' },
+  }
+}
+
+function rebuildCoalitions(factions: ScenarioFactionDetail[], existing: ScenarioDetail['coalitions']): ScenarioDetail['coalitions'] {
+  const ids = Array.from(new Set(factions.map((f) => f.coalition_id).filter(Boolean))) as string[]
+  const result: ScenarioDetail['coalitions'] = {}
+  ids.forEach((cid) => {
+    result[cid] = existing[cid] ?? { member_ids: [], shared_intel: true, hegemony_pool: true }
+    result[cid] = { ...result[cid], member_ids: factions.filter((f) => f.coalition_id === cid).map((f) => f.faction_id) }
+  })
+  return result
+}
+
+function FactionRow({ faction, index, onChange, onRemove }: {
+  faction: ScenarioFactionDetail
+  index: number
+  onChange: (patch: Partial<ScenarioFactionDetail>) => void
+  onRemove: () => void
+}) {
+  const [open, setOpen] = useState(false)
+  return (
+    <div style={{ borderBottom: '1px solid #00d4ff0a', paddingBottom: 8, marginBottom: 8 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <span style={{ fontSize: 10, color: '#334155', ...MONO, minWidth: 16 }}>{index + 1}.</span>
+        <input value={faction.name} onChange={(e) => onChange({ name: e.target.value })}
+          style={{ ...INPUT_S, flex: 1 }} placeholder="Faction name" />
+        <select value={faction.archetype} onChange={(e) => onChange({ archetype: e.target.value })}
+          style={{ ...INPUT_S }}>
+          {ARCHETYPES.map((a) => <option key={a} value={a}>{a}</option>)}
+        </select>
+        <input type="number" value={faction.budget_per_turn} onChange={(e) => onChange({ budget_per_turn: Number(e.target.value) })}
+          style={{ ...INPUT_S, width: 54 }} min={0} title="Budget/turn" />
+        <button onClick={() => setOpen((v) => !v)} style={{ ...INPUT_S, cursor: 'pointer', padding: '3px 8px', color: open ? '#00d4ff' : '#334155' }}>
+          {open ? '▲' : '▼'}
+        </button>
+        <button onClick={onRemove} style={{ ...INPUT_S, cursor: 'pointer', padding: '3px 8px', color: '#ff4499', borderColor: '#ff449933' }}>✕</button>
+      </div>
+
+      {open && (
+        <div style={{ marginTop: 8, paddingLeft: 24, display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <span style={{ fontSize: 10, color: '#475569', ...MONO, minWidth: 100 }}>Faction ID</span>
+            <input value={faction.faction_id} onChange={(e) => onChange({ faction_id: e.target.value })}
+              style={{ ...INPUT_S, flex: 1 }} placeholder="auto-generated from name if blank" />
+          </div>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <span style={{ fontSize: 10, color: '#475569', ...MONO, minWidth: 100 }}>Agent type</span>
+            <select value={faction.agent_type} onChange={(e) => onChange({ agent_type: e.target.value })} style={{ ...INPUT_S }}>
+              <option value="web">Human (web)</option>
+              <option value="rule_based">AI — Rule-based</option>
+              <option value="ai_commander">AI — Commander</option>
+            </select>
+          </div>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <span style={{ fontSize: 10, color: '#475569', ...MONO, minWidth: 100 }}>Coalition ID</span>
+            <input value={faction.coalition_id ?? ''} onChange={(e) => onChange({ coalition_id: e.target.value || undefined })}
+              style={{ ...INPUT_S, flex: 1 }} placeholder="leave blank for none" />
+          </div>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <span style={{ fontSize: 10, color: '#475569', ...MONO, minWidth: 100 }}>Loyalty</span>
+            <input type="range" min={0} max={1} step={0.1} value={faction.coalition_loyalty ?? 0.5}
+              onChange={(e) => onChange({ coalition_loyalty: Number(e.target.value) })} style={{ flex: 1 }} />
+            <span style={{ fontSize: 10, color: '#64748b', ...MONO, minWidth: 28 }}>{((faction.coalition_loyalty ?? 0.5) * 100).toFixed(0)}%</span>
+          </div>
+          <div style={{ marginTop: 4 }}>
+            <div style={{ fontSize: 10, color: '#475569', ...MONO, marginBottom: 4 }}>STARTING ASSETS</div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '4px 12px' }}>
+              {ASSET_KEYS.map((k) => (
+                <div key={k} style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+                  <span style={{ fontSize: 9, color: '#475569', ...MONO, minWidth: 90 }}>{k}</span>
+                  <input type="number" min={0} value={faction.starting_assets[k] ?? 0}
+                    onChange={(e) => onChange({ starting_assets: { ...faction.starting_assets, [k]: Number(e.target.value) } })}
+                    style={{ ...INPUT_S, width: 44 }} />
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function ScenarioEditorTab() {
+  const [scenarios, setScenarios] = useState<ScenarioSummary[]>([])
+  const [selectedId, setSelectedId] = useState('')
+  const [detail, setDetail] = useState<ScenarioDetail | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [status, setStatus] = useState<string | null>(null)
+
+  const isNew = selectedId === '__new__'
+
+  useEffect(() => {
+    listScenarios().then(setScenarios).catch(() => setError('Failed to load scenarios'))
+  }, [])
+
+  function handleSelect(id: string) {
+    setError(null); setStatus(null); setConfirmDelete(false)
+    setSelectedId(id)
+    if (id === '__new__') { setDetail(makeBlankDetail()); return }
+    if (!id) { setDetail(null); return }
+    getScenario(id).then(setDetail).catch((e) => setError(String(e)))
+  }
+
+  function patchDetail(patch: Partial<ScenarioDetail>) {
+    setDetail((prev) => prev ? { ...prev, ...patch } : prev)
+  }
+
+  function updateFaction(idx: number, patch: Partial<ScenarioFactionDetail>) {
+    if (!detail) return
+    const factions = detail.factions.map((f, i) => i === idx ? { ...f, ...patch } : f)
+    patchDetail({ factions, coalitions: rebuildCoalitions(factions, detail.coalitions) })
+  }
+
+  function removeFaction(idx: number) {
+    if (!detail) return
+    const factions = detail.factions.filter((_, i) => i !== idx)
+    patchDetail({ factions, coalitions: rebuildCoalitions(factions, detail.coalitions) })
+  }
+
+  function addFaction() {
+    if (!detail) return
+    patchDetail({ factions: [...detail.factions, makeBlankFaction()] })
+  }
+
+  async function handleSave() {
+    if (!detail) return
+    setSaving(true); setError(null); setStatus(null)
+    try {
+      const coalitions = rebuildCoalitions(detail.factions, detail.coalitions)
+      const payload = { ...detail, coalitions }
+      if (isNew) {
+        const res = await createScenario(payload)
+        const updated = await listScenarios()
+        setScenarios(updated)
+        setSelectedId(res.scenario_id)
+        setStatus('Scenario created.')
+      } else {
+        await updateScenario(selectedId, payload)
+        const updated = await listScenarios()
+        setScenarios(updated)
+        setStatus('Changes saved.')
+      }
+    } catch (e) {
+      setError(String(e))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function handleDelete() {
+    if (!selectedId || isNew) return
+    try {
+      await deleteScenario(selectedId)
+      const updated = await listScenarios()
+      setScenarios(updated)
+      setSelectedId(''); setDetail(null); setConfirmDelete(false)
+    } catch (e) {
+      setError(String(e))
+    }
+  }
+
+  const inputFull: React.CSSProperties = { ...INPUT_S, width: '100%', padding: '6px 10px', fontSize: 12, marginBottom: 6 }
+
+  return (
+    <div style={{ width: '100%', maxWidth: 700 }}>
+      {/* Selector row */}
+      <div style={{ display: 'flex', gap: 8, marginBottom: 16, alignItems: 'center' }}>
+        <select value={selectedId} onChange={(e) => handleSelect(e.target.value)}
+          style={{ ...inputFull, marginBottom: 0, flex: 1 }}>
+          <option value="">— select scenario to edit —</option>
+          {scenarios.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+          <option value="__new__">[ + NEW SCENARIO ]</option>
+        </select>
+        {selectedId && !isNew && (
+          confirmDelete ? (
+            <>
+              <button className="btn-primary" onClick={() => void handleDelete()}
+                style={{ fontSize: 10, padding: '4px 12px', borderColor: '#ff4499', color: '#ff4499', whiteSpace: 'nowrap' }}>
+                CONFIRM
+              </button>
+              <button className="btn-primary" onClick={() => setConfirmDelete(false)}
+                style={{ fontSize: 10, padding: '4px 12px' }}>
+                CANCEL
+              </button>
+            </>
+          ) : (
+            <button className="btn-primary" onClick={() => setConfirmDelete(true)}
+              style={{ fontSize: 10, padding: '4px 12px', borderColor: '#ff449966', color: '#ff4499', whiteSpace: 'nowrap' }}>
+              DELETE
+            </button>
+          )
+        )}
+      </div>
+
+      {error && <div style={{ color: '#ff4499', fontSize: 11, marginBottom: 10, ...MONO }}>{error}</div>}
+      {status && <div style={{ color: '#00ff88', fontSize: 11, marginBottom: 10, ...MONO }}>{status}</div>}
+
+      {detail && (
+        <>
+          {/* Basic info */}
+          <div className="panel" style={{ marginBottom: 12 }}>
+            <div className="panel-title">BASIC INFO</div>
+            <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr', gap: '4px 12px', alignItems: 'center' }}>
+              {([
+                ['Name', 'name', 'text'],
+                ['Description', 'description', 'text'],
+                ['Turn count', 'turns', 'number'],
+                ['Turn represents', 'turn_represents', 'text'],
+              ] as const).map(([label, key, type]) => (
+                <React.Fragment key={key}>
+                  <span style={{ fontSize: 10, color: '#475569', ...MONO }}>{label}</span>
+                  <input type={type} value={String(detail[key as keyof ScenarioDetail] ?? '')}
+                    onChange={(e) => patchDetail({ [key]: type === 'number' ? Number(e.target.value) : e.target.value } as Partial<ScenarioDetail>)}
+                    style={{ ...INPUT_S, width: '100%', padding: '4px 8px' }} min={type === 'number' ? 1 : undefined} />
+                </React.Fragment>
+              ))}
+            </div>
+          </div>
+
+          {/* Factions */}
+          <div className="panel" style={{ marginBottom: 12 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+              <div className="panel-title" style={{ marginBottom: 0 }}>FACTIONS</div>
+              <button className="btn-primary" onClick={addFaction} style={{ fontSize: 10, padding: '2px 12px' }}>+ ADD</button>
+            </div>
+            {detail.factions.length === 0 && (
+              <div style={{ fontSize: 11, color: '#334155', ...MONO, textAlign: 'center', padding: 12 }}>NO FACTIONS — ADD ONE</div>
+            )}
+            {detail.factions.map((f, i) => (
+              <FactionRow key={i} faction={f} index={i}
+                onChange={(patch) => updateFaction(i, patch)}
+                onRemove={() => removeFaction(i)} />
+            ))}
+          </div>
+
+          {/* Coalitions summary */}
+          {Object.keys(rebuildCoalitions(detail.factions, detail.coalitions)).length > 0 && (
+            <div className="panel" style={{ marginBottom: 12 }}>
+              <div className="panel-title">COALITIONS</div>
+              {Object.entries(rebuildCoalitions(detail.factions, detail.coalitions)).map(([cid, c]) => (
+                <div key={cid} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '4px 0', borderBottom: '1px solid #00d4ff08' }}>
+                  <span style={{ fontSize: 11, color: '#e2e8f0', flex: 1, ...MONO }}>{cid}</span>
+                  <span style={{ fontSize: 10, color: '#475569', ...MONO }}>{c.member_ids.length} member{c.member_ids.length !== 1 ? 's' : ''}: {c.member_ids.join(', ')}</span>
+                  <label style={{ fontSize: 10, color: '#64748b', display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <input type="checkbox" checked={c.shared_intel}
+                      onChange={(e) => patchDetail({ coalitions: { ...detail.coalitions, [cid]: { ...c, shared_intel: e.target.checked } } })} />
+                    shared intel
+                  </label>
+                  <label style={{ fontSize: 10, color: '#64748b', display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <input type="checkbox" checked={c.hegemony_pool}
+                      onChange={(e) => patchDetail({ coalitions: { ...detail.coalitions, [cid]: { ...c, hegemony_pool: e.target.checked } } })} />
+                    hegemony pool
+                  </label>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Victory conditions */}
+          <div className="panel" style={{ marginBottom: 16 }}>
+            <div className="panel-title">VICTORY CONDITIONS</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <span style={{ fontSize: 10, color: '#475569', ...MONO, minWidth: 160 }}>Orbital dominance threshold</span>
+              <input type="range" min={0.5} max={0.9} step={0.05}
+                value={detail.victory.coalition_orbital_dominance}
+                onChange={(e) => patchDetail({ victory: { ...detail.victory, coalition_orbital_dominance: Number(e.target.value) } })}
+                style={{ flex: 1 }} />
+              <span style={{ fontSize: 11, color: '#00d4ff', ...MONO, minWidth: 36 }}>
+                {Math.round(detail.victory.coalition_orbital_dominance * 100)}%
+              </span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 8 }}>
+              <span style={{ fontSize: 10, color: '#475569', ...MONO, minWidth: 160 }}>Individual conditions required</span>
+              <input type="checkbox" checked={detail.victory.individual_conditions_required}
+                onChange={(e) => patchDetail({ victory: { ...detail.victory, individual_conditions_required: e.target.checked } })} />
+            </div>
+          </div>
+
+          <button className="btn-primary" onClick={() => void handleSave()} disabled={saving} style={{ width: '100%' }}>
+            {saving ? 'SAVING...' : isNew ? '[ CREATE SCENARIO ]' : '[ SAVE CHANGES ]'}
+          </button>
+        </>
+      )}
+    </div>
+  )
+}
+
 // ── Root ──────────────────────────────────────────────────────────────────────
 export default function SetupPage() {
   const [tab, setTab] = useState<Tab>('NEW GAME')
@@ -321,6 +627,7 @@ export default function SetupPage() {
         {tab === 'NEW GAME' && <NewGameTab />}
         {tab === 'SAVED GAMES' && <SavedGamesTab />}
         {tab === 'AFTER ACTION REVIEWS' && <AARTab />}
+        {tab === 'SCENARIO EDITOR' && <ScenarioEditorTab />}
       </div>
     </div>
   )

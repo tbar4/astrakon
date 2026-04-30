@@ -1,5 +1,5 @@
 import type {
-  ScenarioSummary, SessionSummary, AgentConfig, GameStateResponse, Recommendation, Phase
+  ScenarioSummary, ScenarioDetail, SessionSummary, AgentConfig, GameStateResponse, Recommendation, Phase
 } from '../types'
 
 const BASE = '/api'
@@ -79,6 +79,49 @@ export interface HistoryData {
 
 export async function getHistory(sessionId: string): Promise<HistoryData> {
   return json(await fetch(`${BASE}/game/${sessionId}/history`))
+}
+
+export async function getScenario(scenarioId: string): Promise<ScenarioDetail> {
+  return json(await fetch(`${BASE}/scenarios/${scenarioId}`))
+}
+
+export async function createScenario(detail: ScenarioDetail): Promise<{ scenario_id: string }> {
+  return json(await fetch(`${BASE}/scenarios`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      name: detail.name,
+      description: detail.description,
+      turns: detail.turns,
+      turn_represents: detail.turn_represents,
+      coalitions: detail.coalitions,
+      factions: detail.factions,
+      victory: detail.victory,
+      crisis_events_library: detail.crisis_events?.library ?? 'default_2030',
+    }),
+  }))
+}
+
+export async function updateScenario(scenarioId: string, detail: ScenarioDetail): Promise<{ scenario_id: string }> {
+  return json(await fetch(`${BASE}/scenarios/${scenarioId}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      name: detail.name,
+      description: detail.description,
+      turns: detail.turns,
+      turn_represents: detail.turn_represents,
+      coalitions: detail.coalitions,
+      factions: detail.factions,
+      victory: detail.victory,
+      crisis_events_library: detail.crisis_events?.library ?? 'default_2030',
+    }),
+  }))
+}
+
+export async function deleteScenario(scenarioId: string): Promise<void> {
+  const res = await fetch(`${BASE}/scenarios/${scenarioId}`, { method: 'DELETE' })
+  if (!res.ok) throw new Error(`${res.status}: ${await res.text()}`)
 }
 
 export async function generateAar(sessionId: string): Promise<string> {

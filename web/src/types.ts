@@ -175,3 +175,35 @@ export interface Recommendation {
     response?: ResponseDecision['response']
   }
 }
+
+export interface ScenarioFactionDetail {
+  faction_id: string
+  name: string
+  archetype: string
+  agent_type: string
+  budget_per_turn: number
+  coalition_id?: string
+  coalition_loyalty?: number
+  starting_assets: Partial<Record<string, number>>
+}
+
+export interface ScenarioCoalitionDetail {
+  member_ids: string[]
+  shared_intel: boolean
+  hegemony_pool: boolean
+}
+
+export interface ScenarioDetail {
+  name: string
+  description: string
+  turns: number
+  turn_represents: string
+  factions: ScenarioFactionDetail[]
+  coalitions: Record<string, ScenarioCoalitionDetail>
+  victory: {
+    coalition_orbital_dominance: number
+    individual_conditions_required: boolean
+    individual_conditions: Record<string, unknown>
+  }
+  crisis_events: { library: string }
+}
