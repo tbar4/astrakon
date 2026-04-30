@@ -5,7 +5,7 @@ import type { GameState, FactionState } from '../types'
 export const TILT_FACTOR = 0.45
 const CX = 130
 const CY = 130
-const DOT_CAP = 8; void DOT_CAP
+const DOT_CAP = 8; void DOT_CAP // used in Task 7 for node overflow badge
 
 const RINGS = [
   { label: 'LEO', r: 48,  sw: 1,   dash: undefined as string | undefined, nodeKey: 'leo_nodes' as const, icon: '◎', shell: 'leo' as const },
@@ -94,7 +94,7 @@ export default function HoloOrbitalMap({
   void prevFactionStates
   void humanAdversaryEstimates
   void onFactionHover
-  const factions = useMemo(() => Object.entries(gameState.faction_states), [gameState])
+  const factions = useMemo(() => Object.entries(gameState.faction_states), [gameState.faction_states])
   const angleStep = (Math.PI * 2) / Math.max(factions.length, 1)
 
   return (
@@ -123,7 +123,7 @@ export default function HoloOrbitalMap({
           </g>
 
           {/* Orbital rings */}
-          {RINGS.map(({ r, sw, dash, shell }) => {
+          {RINGS.map(({ r, sw, dash, shell, icon, nodeKey }) => {
             const open = gameState.access_windows?.[shell] ?? true
             const debris = gameState.debris_fields?.[shell] ?? 0
             const kessler = debris >= 0.8
@@ -133,7 +133,7 @@ export default function HoloOrbitalMap({
             const animDur = kessler ? '1s' : '3s'
 
             return (
-              <g key={r}
+              <g key={shell}
                 onMouseEnter={() => onShellHover?.(shell)}
                 onMouseLeave={() => onShellHover?.(null)}
                 style={{ cursor: 'pointer' }}>
@@ -163,15 +163,14 @@ export default function HoloOrbitalMap({
                 {/* Shell mission icon at 12 o'clock (angle = -π/2) */}
                 {(() => {
                   const pt = ellipsePoint(r, -Math.PI / 2)
-                  const ringEntry = RINGS.find(ring => ring.r === r)!
                   const hasNodes = Object.values(gameState.faction_states).some(
-                    (fs) => fs.assets[ringEntry.nodeKey] > 0
+                    (fs) => fs.assets[nodeKey] > 0
                   )
                   return (
                     <text x={pt.x} y={pt.y - 5} fill="rgba(0,212,255,1)"
                       fontSize={8} fontFamily="monospace" textAnchor="middle"
                       opacity={hasNodes ? 0.7 : 0.25}>
-                      {ringEntry.icon}
+                      {icon}
                     </text>
                   )
                 })()}
