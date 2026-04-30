@@ -239,12 +239,55 @@ class DebrisEngine:
         return faction_states, log
 
 
+class AccessWindowEngine:
+    """Models periodic orbital access: LEO alternates, MEO 2-in-3, GEO persistent, Cislunar quarterly."""
+
+    def compute(self, turn: int) -> dict[str, bool]:
+        return {
+            "leo":      (turn % 2) == 1,
+            "meo":      (turn % 3) != 0,
+            "geo":      True,
+            "cislunar": (turn % 4) == 1,
+        }
+
+
+class ManeuverBudgetEngine:
+    COSTS: dict[str, float] = {
+        "kinetic_intercept": 4.0,
+        "deniable_approach": 2.0,
+        "elevation_change":  3.0,
+        "plane_change":      6.0,
+    }
+    BASE_REPLENISH = 2.0
+    PER_LAUNCH_CAPACITY = 1.0
+    MAX_BUDGET = 20.0
+
+    def spend(self, faction_state, op_type: str) -> tuple[bool, str]:
+        """Deduct DV cost. Returns (success, message)."""
+        cost = self.COSTS.get(op_type, 1.0)
+        if faction_state.maneuver_budget < cost:
+            return False, (
+                f"{faction_state.name} insufficient maneuver budget "
+                f"({faction_state.maneuver_budget:.1f}/{cost:.1f} DV)"
+            )
+        faction_state.maneuver_budget -= cost
+        return True, ""
+
+    def replenish(self, faction_state) -> None:
+        gain = self.BASE_REPLENISH + self.PER_LAUNCH_CAPACITY * faction_state.assets.launch_capacity
+        faction_state.maneuver_budget = min(
+            faction_state.maneuver_budget + gain, self.MAX_BUDGET
+        )
+
+
 class SimulationEngine:
     def __init__(self):
         self.investment_resolver = InvestmentResolver()
         self.sda_filter = SDAFilter()
         self.conflict_resolver = ConflictResolver()
         self.debris_engine = DebrisEngine()
+        self.access_window_engine = AccessWindowEngine()
+        self.maneuver_budget_engine = ManeuverBudgetEngine()
 
     def compute_orbital_dominance(
         self, faction_id: str, all_assets: dict[str, FactionAssets]

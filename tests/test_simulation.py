@@ -103,3 +103,49 @@ def test_debris_engine_apply_effects_damages_nodes():
     updated, log = engine.apply_debris_effects(faction_states, fields)
     assert updated["ussf"].assets.leo_nodes < 20
     assert len(log) > 0
+
+
+from engine.simulation import AccessWindowEngine, ManeuverBudgetEngine
+
+def test_access_window_leo_alternates():
+    engine = AccessWindowEngine()
+    assert engine.compute(1)["leo"] is True
+    assert engine.compute(2)["leo"] is False
+    assert engine.compute(3)["leo"] is True
+
+def test_access_window_geo_always_open():
+    engine = AccessWindowEngine()
+    for turn in range(1, 10):
+        assert engine.compute(turn)["geo"] is True
+
+def test_access_window_cislunar_every_four():
+    engine = AccessWindowEngine()
+    assert engine.compute(1)["cislunar"] is True
+    assert engine.compute(2)["cislunar"] is False
+    assert engine.compute(5)["cislunar"] is True
+
+def test_maneuver_budget_kinetic_cost():
+    engine = ManeuverBudgetEngine()
+    from engine.state import FactionState, FactionAssets
+    fs = FactionState(faction_id="x", name="X", budget_per_turn=100,
+                      current_budget=100, assets=FactionAssets(), maneuver_budget=10.0)
+    ok, msg = engine.spend(fs, "kinetic_intercept")
+    assert ok
+    assert fs.maneuver_budget < 10.0
+
+def test_maneuver_budget_insufficient_returns_false():
+    engine = ManeuverBudgetEngine()
+    from engine.state import FactionState, FactionAssets
+    fs = FactionState(faction_id="x", name="X", budget_per_turn=100,
+                      current_budget=100, assets=FactionAssets(), maneuver_budget=0.5)
+    ok, msg = engine.spend(fs, "kinetic_intercept")
+    assert not ok
+
+def test_maneuver_budget_replenish():
+    engine = ManeuverBudgetEngine()
+    from engine.state import FactionState, FactionAssets
+    fs = FactionState(faction_id="x", name="X", budget_per_turn=100,
+                      current_budget=100, assets=FactionAssets(launch_capacity=2),
+                      maneuver_budget=3.0)
+    engine.replenish(fs)
+    assert fs.maneuver_budget > 3.0
