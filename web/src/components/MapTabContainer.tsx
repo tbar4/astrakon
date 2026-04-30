@@ -5,6 +5,7 @@ import type { TurnSnapshot } from '../store/gameStore'
 import DominanceStrip from './DominanceStrip'
 import OpsTab from './OpsTab'
 import AARPanel from './AARPanel'
+import HoloOrbitalMap from './HoloOrbitalMap'
 
 type Tab = 'orbital' | 'deltav' | 'ops' | 'aar'
 
@@ -34,14 +35,6 @@ export default function MapTabContainer({
   const [selectedShell, setSelectedShell] = useState<string | null>(null)
   const [selectedFaction, setSelectedFaction] = useState<string | null>(null)
 
-  // selectedShell, selectedFaction, setSelectedShell, setSelectedFaction will be wired to child components in later tasks
-  void selectedShell
-  void setSelectedShell
-  void selectedFaction
-  void setSelectedFaction
-  void prevFactionStates
-  void humanAdversaryEstimates
-
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
       {/* Tab bar */}
@@ -65,11 +58,15 @@ export default function MapTabContainer({
       {/* Tab content */}
       <div style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
         {activeTab === 'orbital' && (
-          <div className="panel" style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <span style={{ fontFamily: 'Courier New', fontSize: 10, color: '#334155' }}>
-              ORBITAL MAP — LOADING
-            </span>
-          </div>
+          <HoloOrbitalMap
+            gameState={gameState}
+            prevFactionStates={prevFactionStates}
+            humanAdversaryEstimates={humanAdversaryEstimates}
+            selectedShell={selectedShell}
+            selectedFaction={selectedFaction}
+            onShellHover={setSelectedShell}
+            onFactionHover={setSelectedFaction}
+          />
         )}
         {activeTab === 'deltav' && (
           <div className="panel" style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
