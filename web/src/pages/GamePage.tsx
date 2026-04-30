@@ -9,6 +9,7 @@ import DominanceRail from '../components/DominanceRail'
 import LoadingOverlay from '../components/LoadingOverlay'
 import AdvisorPanel from '../components/AdvisorPanel'
 import TurnSummary from '../components/TurnSummary'
+import TutorialPanel from '../components/TutorialPanel'
 import InvestPanel from '../components/phase/InvestPanel'
 import OpsPanel from '../components/phase/OpsPanel'
 import ResponsePanel from '../components/phase/ResponsePanel'
@@ -238,6 +239,8 @@ export default function GamePage() {
               </button>
             </div>
           )}
+
+          <TutorialPanel phase={phase} turn={gameState.turn} />
 
           {recommendation && (
             <AdvisorPanel
