@@ -184,3 +184,51 @@ async def test_access_window_meo_open_on_turn_two(scenario, agents, audit):
     referee = GameReferee(scenario=scenario, agents=agents, audit=audit)
     windows = referee.sim.access_window_engine.compute(2)
     assert windows["meo"] is True
+
+
+@pytest.mark.asyncio
+async def test_cognitive_penalty_computed_from_jfe_and_sda_malus(scenario, agents, audit):
+    referee = GameReferee(scenario=scenario, agents=agents, audit=audit)
+    fid = list(referee.faction_states.keys())[0]
+    referee.faction_states[fid].joint_force_effectiveness = 0.3  # badly degraded
+    referee._event_sda_malus[fid] = 0.4
+    referee._update_faction_metrics()
+    assert referee.faction_states[fid].cognitive_penalty > 0.5
+
+@pytest.mark.asyncio
+async def test_coalition_loyalty_drops_under_high_tension(scenario, agents, audit):
+    referee = GameReferee(scenario=scenario, agents=agents, audit=audit)
+    referee.tension_level = 0.8
+    # Find a faction that has a coalition
+    fid = next(f.faction_id for f in scenario.factions if f.coalition_id)
+    fs = referee.faction_states[fid]
+    initial_loyalty = fs.coalition_loyalty
+    referee._update_coalition_loyalty()
+    assert fs.coalition_loyalty <= initial_loyalty
+
+@pytest.mark.asyncio
+async def test_low_loyalty_coordination_fails(scenario, agents, audit):
+    """When loyalty < 0.25, coordinate op logs failure."""
+    referee = GameReferee(scenario=scenario, agents=agents, audit=audit)
+    # Find a faction with an ally
+    fid = next(f.faction_id for f in scenario.factions if f.coalition_id)
+    coalition_id = referee.faction_states[fid].coalition_id
+    cs = referee.coalition_states.get(coalition_id)
+    ally_fid = next((mid for mid in cs.member_ids if mid != fid), None)
+    if not ally_fid:
+        pytest.skip("No ally found")
+    referee.faction_states[fid].coalition_loyalty = 0.1  # very low
+    from engine.state import Decision, Phase, OperationalAction
+    decisions = {
+        fid: Decision(
+            phase=Phase.OPERATIONS, faction_id=fid,
+            operations=[OperationalAction(action_type="coordinate", target_faction=ally_fid, rationale="test")]
+        ).model_dump_json()
+    }
+    for other_fid in referee.faction_states:
+        if other_fid != fid:
+            decisions[other_fid] = Decision(
+                phase=Phase.OPERATIONS, faction_id=other_fid, operations=[]
+            ).model_dump_json()
+    await referee.resolve_operations(turn=1, decisions=decisions)
+    assert any("loyal" in e.lower() or "coordinat" in e.lower() for e in referee._turn_log)

@@ -606,17 +606,39 @@ class GameReferee:
                 elif op.action_type == "coordinate" and target_fid:
                     self._prev_turn_ops.append("coordinate")
                     if is_ally:
-                        loyalty_factor = 1.0
-                        if self.tension_level > 0.7 and fs.coalition_loyalty < 0.6:
-                            loyalty_factor = 0.5
-                        bonus = 0.1 * loyalty_factor
-                        self._coordination_bonuses[fid] = self._coordination_bonuses.get(fid, 0.0) + bonus
-                        self._coordination_bonuses[target_fid] = self._coordination_bonuses.get(target_fid, 0.0) + bonus
-                        note = " (loyalty-degraded)" if loyalty_factor < 1.0 else ""
-                        self._turn_log.append(
-                            f"{fs.name} coordinated with {target_fs.name} "
-                            f"(+{bonus:.0%} SDA next snapshot{note})"
-                        )
+                        # High cognitive penalty nullifies coordination
+                        if fs.cognitive_penalty > 0.75:
+                            self._turn_log.append(
+                                f"{fs.name} coordination with {target_fs.name} failed — "
+                                f"cognitive degradation too severe ({fs.cognitive_penalty:.0%})"
+                            )
+                        elif fs.coalition_loyalty < 0.25:
+                            self._turn_log.append(
+                                f"{fs.name} coordination with {target_fs.name} failed — "
+                                f"loyalty too low ({fs.coalition_loyalty:.0%})"
+                            )
+                        else:
+                            loyalty_factor = 1.0
+                            if self.tension_level > 0.7 and fs.coalition_loyalty < 0.5:
+                                loyalty_factor = fs.coalition_loyalty / 0.5
+                            cognitive_factor = 1.0 - (fs.cognitive_penalty * 0.5)
+                            bonus = 0.1 * loyalty_factor * cognitive_factor
+                            self._coordination_bonuses[fid] = (
+                                self._coordination_bonuses.get(fid, 0.0) + bonus
+                            )
+                            self._coordination_bonuses[target_fid] = (
+                                self._coordination_bonuses.get(target_fid, 0.0) + bonus
+                            )
+                            notes = []
+                            if loyalty_factor < 1.0:
+                                notes.append(f"loyalty-degraded ×{loyalty_factor:.1f}")
+                            if cognitive_factor < 1.0:
+                                notes.append(f"cognitive penalty ×{cognitive_factor:.1f}")
+                            note = f" ({', '.join(notes)})" if notes else ""
+                            self._turn_log.append(
+                                f"{fs.name} coordinated with {target_fs.name} "
+                                f"(+{bonus:.0%} SDA next snapshot{note})"
+                            )
                     else:
                         self._turn_log.append(
                             f"{fs.name} attempted coordination with non-ally {target_fid} — ignored"
@@ -728,8 +750,15 @@ class GameReferee:
                 if decision.response.retaliate and decision.response.target_faction:
                     self._resolve_retaliation(fid, decision.response.target_faction)
             await self.audit.write_decision(turn=turn, decision=decision)
+            # De-escalation reduces escalation rung and recovers coalition loyalty
+            if decision.response and not decision.response.escalate and decision.response.public_statement:
+                self._escalation_rung = max(0, self._escalation_rung - 1)
+                fs = self.faction_states.get(fid)
+                if fs and fs.coalition_id:
+                    fs.coalition_loyalty = min(1.0, fs.coalition_loyalty + 0.02)
 
         self._turn_log_summary = self._build_turn_log_summary(turn)
+        self._update_coalition_loyalty()
 
     async def _run_response_phase(self, turn: int):
         events = self.generate_turn_events(turn)
@@ -762,6 +791,32 @@ class GameReferee:
                 leo_lost_frac = max(0, init.leo_nodes - fs.assets.leo_nodes) / max(init.leo_nodes, 1)
                 jfe_loss = meo_lost * 0.10 + geo_lost * 0.15 + leo_lost_frac * 0.30
                 fs.joint_force_effectiveness = max(0.0, 1.0 - jfe_loss)
+
+            # Cognitive penalty: JFE loss + SDA degradation from events
+            jfe_loss = max(0.0, 1.0 - fs.joint_force_effectiveness)
+            sda_malus = self._event_sda_malus.get(fid, 0.0)
+            fs.cognitive_penalty = min(1.0, jfe_loss * 0.5 + sda_malus * 1.5)
+
+    def _update_coalition_loyalty(self) -> None:
+        """Adjust coalition loyalty based on tension and recent events."""
+        for fs in self.faction_states.values():
+            if fs.coalition_id is None:
+                continue
+            # High tension strains coalitions
+            if self.tension_level > 0.6:
+                strain = (self.tension_level - 0.6) * 0.05
+                fs.coalition_loyalty = max(0.0, fs.coalition_loyalty - strain)
+            # Defection: loyalty below 0.15 → leave coalition
+            if fs.coalition_loyalty < 0.15:
+                old_cid = fs.coalition_id
+                fs.coalition_id = None
+                if old_cid in self.coalition_states:
+                    mids = self.coalition_states[old_cid].member_ids
+                    if fs.faction_id in mids:
+                        self.coalition_states[old_cid].member_ids = [m for m in mids if m != fs.faction_id]
+                self._turn_log.append(
+                    f"[DEFECTION] {fs.name} has left coalition {old_cid} (loyalty collapsed)"
+                )
 
     def _check_individual_conditions(self, member_ids: list[str]) -> bool:
         individual = self.scenario.victory.individual_conditions
