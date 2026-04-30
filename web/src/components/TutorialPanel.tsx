@@ -48,7 +48,7 @@ export default function TutorialPanel({ phase, turn }: Props) {
   useEffect(() => {
     const done = localStorage.getItem(STORAGE_KEY)
     if (!done && turn === 1) setVisible(true)
-  }, [turn])
+  }, [turn, phase])
 
   function dismissForever() {
     localStorage.setItem(STORAGE_KEY, '1')
