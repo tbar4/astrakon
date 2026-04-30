@@ -93,6 +93,7 @@ def _sync_state_from_referee(state: GameState, referee: GameReferee) -> None:
     state.debris_fields = mutable["debris_fields"]
     state.escalation_rung = mutable["escalation_rung"]
     state.pending_deniable_approaches = mutable["pending_deniable_approaches"]
+    state.access_windows = referee.sim.access_window_engine.compute(state.turn)
 
 
 def _compute_dominance(state: GameState, sim: SimulationEngine) -> dict[str, float]:
@@ -326,6 +327,15 @@ async def advance(
             fallback.receive_state(referee._build_snapshot(next_fid, state.current_phase, available))
             dec = await fallback.submit_decision(state.current_phase)
             state.phase_decisions[next_fid] = dec.model_dump_json()
+
+        try:
+            from agents.ai_commander import AICommanderAgent
+            if isinstance(agent, AICommanderAgent):
+                prev = state.token_totals.get(next_fid, {"input_tokens": 0, "output_tokens": 0, "cache_read_tokens": 0, "cache_creation_tokens": 0})
+                t = agent.token_totals
+                state.token_totals[next_fid] = {k: prev[k] + t.get(k, 0) for k in prev}
+        except Exception:
+            pass
 
         await save_session(state, db_path=db_path)  # checkpoint after each agent
 

@@ -167,3 +167,20 @@ async def test_deniable_approach_resolves_after_one_turn(scenario, agents, audit
     referee.faction_states["pla_ssf"].assets.leo_nodes = 10
     referee._resolve_pending_deniables(turn=2)
     assert len(referee._turn_log) > 0
+
+
+@pytest.mark.asyncio
+async def test_access_window_leo_closed_on_even_turn(scenario, agents, audit):
+    """AccessWindowEngine returns closed for LEO on even turns."""
+    referee = GameReferee(scenario=scenario, agents=agents, audit=audit)
+    referee._current_turn = 2  # even turn → LEO window closed
+    windows = referee.sim.access_window_engine.compute(2)
+    assert windows["leo"] is False
+
+
+@pytest.mark.asyncio
+async def test_access_window_meo_open_on_turn_two(scenario, agents, audit):
+    """MEO is open on turn 2 (2%3 != 0)."""
+    referee = GameReferee(scenario=scenario, agents=agents, audit=audit)
+    windows = referee.sim.access_window_engine.compute(2)
+    assert windows["meo"] is True

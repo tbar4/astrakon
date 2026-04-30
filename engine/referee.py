@@ -555,6 +555,19 @@ class GameReferee:
                                 f"{fs.name} dispatched kinetic interceptor toward "
                                 f"{target_fs.name} (arrives turn {turn + 2})"
                             )
+                            # Informational: note if target's primary shell access window is closed
+                            target_primary_shell = (
+                                "leo" if target_fs.assets.leo_nodes > 0 else
+                                "meo" if target_fs.assets.meo_nodes > 0 else
+                                "geo" if target_fs.assets.geo_nodes > 0 else "cislunar"
+                            )
+                            windows = self.sim.access_window_engine.compute(turn)
+                            if not windows.get(target_primary_shell, True):
+                                self._turn_log.append(
+                                    f"{fs.name} kinetic toward {target_fs.name} "
+                                    f"({target_primary_shell.upper()}) — access window closed this turn, "
+                                    f"2-turn transit may coincide with open window"
+                                )
                         else:
                             self._turn_log.append(f"{fs.name} kinetic intercept aborted — {dv_msg}")
                     else:
