@@ -25,6 +25,8 @@ export interface FactionState {
   disruption_score: number
   market_share: number
   joint_force_effectiveness: number
+  maneuver_budget: number
+  cognitive_penalty: number
 }
 
 export interface CoalitionState {
@@ -55,7 +57,17 @@ export interface GameStateSnapshot {
   debris_level: number
   joint_force_effectiveness: number
   incoming_threats: Array<{ attacker: string; declared_turn: number }>
+  debris_fields: Record<string, number>
+  access_windows: Record<string, boolean>
+  escalation_rung: number
   faction_names: Record<string, string>
+}
+
+export interface TokenTotals {
+  input_tokens: number
+  output_tokens: number
+  cache_read_tokens: number
+  cache_creation_tokens: number
 }
 
 export interface GameState {
@@ -92,6 +104,15 @@ export interface GameState {
   error: string | null
   victory_threshold: number
   coalition_colors: Record<string, string>
+  debris_fields: Record<string, number>
+  escalation_rung: number
+  access_windows: Record<string, boolean>
+  human_adversary_estimates: Record<string, {
+    leo_nodes: number; meo_nodes: number; geo_nodes: number;
+    cislunar_nodes: number; asat_kinetic: number; asat_deniable: number;
+    ew_jammers: number; sda_sensors: number; relay_nodes: number; launch_capacity: number
+  }>
+  token_totals: Record<string, TokenTotals>
 }
 
 export interface GameStateResponse {

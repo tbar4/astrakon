@@ -165,6 +165,18 @@ export default function GamePage() {
         </span>
         <span style={{ flex: 1 }} />
         <span className="mono" style={{ color: '#64748b', fontSize: 10 }}>{gameState.scenario_name}</span>
+        {Object.keys(gameState.token_totals ?? {}).length > 0 && (() => {
+          const totals = gameState.token_totals ?? {}
+          const totalIn = Object.values(totals).reduce((s, t) => s + (t.input_tokens ?? 0), 0)
+          const totalOut = Object.values(totals).reduce((s, t) => s + (t.output_tokens ?? 0), 0)
+          const total = totalIn + totalOut
+          const fmt = total >= 1000 ? `${(total / 1000).toFixed(1)}K` : String(total)
+          return (
+            <span className="mono" style={{ color: '#475569', fontSize: 9, letterSpacing: 1 }} title={`AI tokens: ${totalIn.toLocaleString()} in / ${totalOut.toLocaleString()} out`}>
+              ⬡ {fmt} tok
+            </span>
+          )
+        })()}
         <span className="mono" style={{ color: '#1e3a4a', fontSize: 9, letterSpacing: 1 }}>
           [A] ACCEPT · [D] DISMISS · [↵] CONTINUE · [L] LOG · [ESC] MENU
         </span>
@@ -209,7 +221,7 @@ export default function GamePage() {
 
           {/* Center: orbital map fills remaining space */}
           <div style={{ flex: 1, minHeight: 0 }}>
-            <OrbitalMap gameState={gameState} coalitionDominance={coalitionDominance} prevFactionStates={prevFactionStates} />
+            <OrbitalMap gameState={gameState} coalitionDominance={coalitionDominance} prevFactionStates={prevFactionStates} humanAdversaryEstimates={gameState.human_adversary_estimates ?? {}} />
           </div>
 
           {/* Bottom box: ops log */}
