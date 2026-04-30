@@ -6,6 +6,11 @@ interface Props {
   gameState: GameState
   coalitionDominance: Record<string, number>
   prevFactionStates: Record<string, FactionState> | null
+  humanAdversaryEstimates: Record<string, {
+    leo_nodes: number; meo_nodes: number; geo_nodes: number;
+    cislunar_nodes: number; asat_kinetic: number; asat_deniable: number;
+    ew_jammers: number; sda_sensors: number; relay_nodes: number; launch_capacity: number
+  }>
 }
 
 const RINGS = [
@@ -57,6 +62,7 @@ function dotsOnRing(
   factionIdx: number,
   totalFactions: number,
   { delta, jammed }: NodeDelta,
+  uncertain = false,
 ) {
   const visible = Math.min(count, DOT_CAP)
   const angleStep = (Math.PI * 2) / Math.max(totalFactions, 1)
@@ -85,9 +91,13 @@ function dotsOnRing(
     }
 
     elements.push(
-      <circle key={i} cx={cx} cy={cy} r={3} fill={color}
-        stroke={stroke} strokeWidth={strokeWidth} strokeDasharray={strokeDasharray}
-        style={{ filter: `drop-shadow(0 0 3px ${color})` }} />
+      uncertain
+        ? <circle key={i} cx={cx} cy={cy} r={3}
+            fill="none" stroke="#475569" strokeWidth={1}
+            strokeDasharray="1,1" opacity={0.4} />
+        : <circle key={i} cx={cx} cy={cy} r={3} fill={color}
+            stroke={stroke} strokeWidth={strokeWidth} strokeDasharray={strokeDasharray}
+            style={{ filter: `drop-shadow(0 0 3px ${color})` }} />
     )
   }
 
@@ -143,9 +153,29 @@ function factionLabelAnchor(angle: number): { textAnchor: TextAnchor; dominantBa
   return { textAnchor, dominantBaseline }
 }
 
-export default function OrbitalMap({ gameState, prevFactionStates }: Props) {
+export default function OrbitalMap({ gameState, prevFactionStates, humanAdversaryEstimates }: Props) {
   const factions = useMemo(() => Object.entries(gameState.faction_states), [gameState])
   const threats = gameState.human_snapshot?.incoming_threats ?? []
+
+  function getNodeCount(
+    factionId: string,
+    shell: 'leo_nodes' | 'meo_nodes' | 'geo_nodes' | 'cislunar_nodes',
+  ): { count: number; uncertain: boolean } {
+    const humanCoalition = Object.entries(gameState.coalition_states).find(([, cs]) =>
+      cs.member_ids.includes(gameState.human_faction_id)
+    )?.[0]
+    const isAlly = humanCoalition
+      ? gameState.coalition_states[humanCoalition]?.member_ids.includes(factionId)
+      : false
+    const isHuman = gameState.human_faction_ids.includes(factionId)
+
+    if (isHuman || isAlly) {
+      return { count: gameState.faction_states[factionId]?.assets[shell] ?? 0, uncertain: false }
+    }
+    const est = humanAdversaryEstimates[factionId]
+    if (!est) return { count: 0, uncertain: true }
+    return { count: est[shell] ?? 0, uncertain: true }
+  }
 
   const angleStep = (Math.PI * 2) / Math.max(factions.length, 1)
 
@@ -164,6 +194,23 @@ export default function OrbitalMap({ gameState, prevFactionStates }: Props) {
                 fontSize={6} fontFamily="monospace">{label}</text>
             </g>
           ))}
+
+          {/* Debris overlays */}
+          {(['leo', 'meo', 'geo', 'cislunar'] as const).map((shell, i) => {
+            const severity = gameState.debris_fields?.[shell] ?? 0
+            if (severity < 0.1) return null
+            const ringR = [52, 74, 94, 112][i]
+            const opacity = Math.min(severity * 0.6, 0.5)
+            const strokeColor = severity >= 0.8 ? '#ef4444' : '#f97316'
+            return (
+              <circle key={`debris-${shell}`} cx={130} cy={130} r={ringR}
+                fill="none" stroke={strokeColor}
+                strokeWidth={severity >= 0.8 ? 4 : 2}
+                strokeDasharray="3,6"
+                opacity={opacity}
+              />
+            )
+          })}
 
           {/* Earth */}
           <circle cx={130} cy={130} r={12} fill="#020b18" stroke="rgba(0,212,255,0.5)" strokeWidth={1.5} />
@@ -191,14 +238,14 @@ export default function OrbitalMap({ gameState, prevFactionStates }: Props) {
 
           {/* Faction nodes */}
           {RINGS.map(({ r, key }) =>
-            factions.map(([fid, fs], idx) => {
-              const count = fs.assets[key]
-              if (count === 0) return null
+            factions.map(([fid], idx) => {
+              const { count, uncertain } = getNodeCount(fid, key)
+              if (count === 0 && !uncertain) return null
               const color = factionColor(fid, gameState)
               const nodeDelta = computeNodeDelta(fid, key, gameState, prevFactionStates)
               return (
                 <g key={`${r}-${fid}`}>
-                  {dotsOnRing(count, r, color, idx, factions.length, nodeDelta)}
+                  {dotsOnRing(count, r, color, idx, factions.length, nodeDelta, uncertain)}
                 </g>
               )
             })

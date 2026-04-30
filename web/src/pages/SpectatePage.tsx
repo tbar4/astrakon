@@ -143,7 +143,7 @@ export default function SpectatePage() {
 
         {/* LEFT: orbital map */}
         <div style={{ flex: 2, minHeight: 0 }}>
-          <OrbitalMap gameState={gameState} coalitionDominance={coalitionDominance} prevFactionStates={null} />
+          <OrbitalMap gameState={gameState} coalitionDominance={coalitionDominance} prevFactionStates={null} humanAdversaryEstimates={{}} />
         </div>
 
         {/* RIGHT: dominance + faction overview + ops log */}
