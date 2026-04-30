@@ -90,6 +90,7 @@ class GameReferee:
 
     async def run_turn(self, turn: int):
         self._current_turn = turn
+        self._turn_log = []
         self._replenish_budgets(turn)
         await self._run_investment_phase(turn)
         await self._run_operations_phase(turn)
@@ -418,7 +419,6 @@ class GameReferee:
             ["task_assets", "coordinate", "gray_zone", "alliance_move", "signal"]
         )
 
-        self._turn_log = self._turn_log or []  # preserve kinetic approach log entries above
         self._prev_turn_ops = []
         self._coordination_bonuses = {}
 
