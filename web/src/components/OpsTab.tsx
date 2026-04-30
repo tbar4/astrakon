@@ -49,7 +49,10 @@ function OpsSparklines({ turnHistory, coalitionColors }: {
   )
 }
 
-export default function OpsTab({ gameState, coalitionDominance: _coalitionDominance, turnHistory }: Props) {
+const SHELL_LABELS: Record<string, string> = { leo: 'LEO', meo: 'MEO', geo: 'GEO', cislunar: 'CIS' }
+
+export default function OpsTab({ gameState, coalitionDominance, turnHistory }: Props) {
+  void coalitionDominance
   const rung = gameState.escalation_rung ?? 0
   const rungColor = ESCALATION_COLORS[Math.min(rung, 5)]
   const threats = gameState.human_snapshot?.incoming_threats ?? []
@@ -82,7 +85,7 @@ export default function OpsTab({ gameState, coalitionDominance: _coalitionDomina
             return (
               <div key={shell} style={{ textAlign: 'center', flex: 1 }}>
                 <div style={{ fontFamily: 'Courier New', fontSize: 8, color, letterSpacing: 1 }}>
-                  {shell.toUpperCase()}
+                  {SHELL_LABELS[shell] ?? shell.toUpperCase()}
                 </div>
                 <div style={{ fontFamily: 'Courier New', fontSize: 7, color, marginTop: 1 }}>{label}</div>
                 {nextOpen !== null && (
