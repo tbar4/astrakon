@@ -96,12 +96,12 @@ async def test_kinetic_strike_adds_shell_debris(scenario, agents, audit):
     referee._pending_kinetic_approaches = [{
         "attacker_fid": "ussf",
         "target_fid": "pla_ssf",
-        "declared_turn": 0,
+        "declared_turn": 1,
         "approach_type": "kinetic",
     }]
     referee.faction_states["ussf"].assets.asat_kinetic = 3
     referee.faction_states["pla_ssf"].assets.leo_nodes = 10
-    referee.resolve_pending_kinetics(turn=1)
+    referee.resolve_pending_kinetics(turn=3)
     leo_debris = referee._debris_fields.get("leo", 0.0)
     assert leo_debris > 0.0
 
@@ -111,12 +111,12 @@ async def test_escalation_rung_rises_on_kinetic(scenario, agents, audit):
     referee._pending_kinetic_approaches = [{
         "attacker_fid": "ussf",
         "target_fid": "pla_ssf",
-        "declared_turn": 0,
+        "declared_turn": 1,
         "approach_type": "kinetic",
     }]
     referee.faction_states["ussf"].assets.asat_kinetic = 3
     referee.faction_states["pla_ssf"].assets.leo_nodes = 10
-    referee.resolve_pending_kinetics(turn=1)
+    referee.resolve_pending_kinetics(turn=3)
     assert referee._escalation_rung >= 4  # Kinetic strike = rung 4
 
 
@@ -126,3 +126,44 @@ async def test_maneuver_budget_replenished_each_turn(scenario, agents, audit):
     referee.faction_states[fid].maneuver_budget = 5.0
     referee._replenish_budgets(turn=1)
     assert referee.faction_states[fid].maneuver_budget > 5.0
+
+
+@pytest.mark.asyncio
+async def test_kinetic_requires_two_turn_transit(scenario, agents, audit):
+    """Kinetic declared turn 1 should NOT resolve on turn 2, only on turn 3."""
+    referee = GameReferee(scenario=scenario, agents=agents, audit=audit)
+    referee._pending_kinetic_approaches = [{
+        "attacker_fid": "ussf", "target_fid": "pla_ssf",
+        "declared_turn": 1, "approach_type": "kinetic",
+    }]
+    referee.faction_states["ussf"].assets.asat_kinetic = 3
+    referee.faction_states["pla_ssf"].assets.leo_nodes = 10
+    referee.resolve_pending_kinetics(turn=2)  # too early — should not resolve
+    assert referee.faction_states["pla_ssf"].assets.leo_nodes == 10  # unchanged
+
+
+@pytest.mark.asyncio
+async def test_kinetic_resolves_on_turn_three(scenario, agents, audit):
+    referee = GameReferee(scenario=scenario, agents=agents, audit=audit)
+    referee._pending_kinetic_approaches = [{
+        "attacker_fid": "ussf", "target_fid": "pla_ssf",
+        "declared_turn": 1, "approach_type": "kinetic",
+    }]
+    referee.faction_states["ussf"].assets.asat_kinetic = 3
+    referee.faction_states["pla_ssf"].assets.leo_nodes = 10
+    referee.resolve_pending_kinetics(turn=3)  # correct window (declared_turn + 2 = 3)
+    # kinetic was attempted — log should have something
+    assert len(referee._turn_log) > 0
+
+
+@pytest.mark.asyncio
+async def test_deniable_approach_resolves_after_one_turn(scenario, agents, audit):
+    referee = GameReferee(scenario=scenario, agents=agents, audit=audit)
+    referee._pending_deniable_approaches = [{
+        "attacker_fid": "ussf", "target_fid": "pla_ssf",
+        "declared_turn": 1,
+    }]
+    referee.faction_states["ussf"].assets.asat_deniable = 2
+    referee.faction_states["pla_ssf"].assets.leo_nodes = 10
+    referee._resolve_pending_deniables(turn=2)
+    assert len(referee._turn_log) > 0

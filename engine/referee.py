@@ -542,15 +542,21 @@ class GameReferee:
                 if op.action_type == "task_assets":
                     mission = op.parameters.get("mission", "")
                     if mission == "intercept" and is_adversary and fs.assets.asat_kinetic > 0:
-                        self._pending_kinetic_approaches.append({
-                            "attacker_fid": fid,
-                            "target_fid": target_fid,
-                            "declared_turn": turn,
-                        })
-                        self._turn_log.append(
-                            f"{fs.name} dispatched kinetic interceptor toward "
-                            f"{target_fs.name} (arrives turn {turn + 1})"
-                        )
+                        ok, dv_msg = self.sim.maneuver_budget_engine.spend(fs, "kinetic_intercept")
+                        if ok:
+                            self._pending_kinetic_approaches.append({
+                                "attacker_fid": fid,
+                                "target_fid": target_fid,
+                                "declared_turn": turn,
+                                "approach_type": "kinetic",
+                            })
+                            self._escalation_rung = max(self._escalation_rung, 3)
+                            self._turn_log.append(
+                                f"{fs.name} dispatched kinetic interceptor toward "
+                                f"{target_fs.name} (arrives turn {turn + 2})"
+                            )
+                        else:
+                            self._turn_log.append(f"{fs.name} kinetic intercept aborted — {dv_msg}")
                     else:
                         self._prev_turn_ops.append("task_assets")
                         if target_fid and is_adversary:
@@ -560,30 +566,21 @@ class GameReferee:
 
                 elif op.action_type == "gray_zone" and is_adversary:
                     if fs.assets.asat_deniable > 0:
-                        result = self.sim.conflict_resolver.resolve_deniable_asat(
-                            attacker_assets=fs.assets,
-                            defender_sda_level=target_fs.sda_level(),
-                        )
-                        nodes_hit = min(result["nodes_destroyed"], target_fs.assets.leo_nodes)
-                        target_fs.assets.leo_nodes -= nodes_hit
-                        fs.assets.asat_deniable -= 1
-                        self._debris_fields = self.sim.debris_engine.add_debris(
-                            self._debris_fields, "leo",
-                            self.sim.debris_engine.DEBRIS_PER_NODE_DENIABLE * nodes_hit
-                        )
-                        self.debris_level = max(self._debris_fields.values()) if self._debris_fields else 0.0
-                        fs.disruption_score += nodes_hit * 5
-                        self._prev_turn_ops.append("deniable_strike")
-                        detected = result["detected"]
-                        attributed = result["attributed"]
-                        suffix = (
-                            f" ({'attributed to ' + fs.name if attributed else 'detected, source unclear'})"
-                            if detected else " (undetected)"
-                        )
-                        self._turn_log.append(
-                            f"{fs.name} gray-zone op vs {target_fs.name}: "
-                            f"{nodes_hit} nodes disrupted{suffix}"
-                        )
+                        # Queue as delayed approach (1-turn transit)
+                        ok, dv_msg = self.sim.maneuver_budget_engine.spend(fs, "deniable_approach")
+                        if ok:
+                            self._pending_deniable_approaches.append({
+                                "attacker_fid": fid,
+                                "target_fid": target_fid,
+                                "declared_turn": turn,
+                            })
+                            self._escalation_rung = max(self._escalation_rung, 2)
+                            self._turn_log.append(
+                                f"{fs.name} co-orbital approach toward {target_fs.name} "
+                                f"(arrives turn {turn + 1}, ambiguous signature)"
+                            )
+                        else:
+                            self._turn_log.append(f"{fs.name} gray-zone op aborted — {dv_msg}")
                     elif fs.assets.ew_jammers > 0:
                         self._prev_turn_ops.append("gray_zone")
                         self._turn_log.append(f"{fs.name} EW jamming ops against {target_fs.name}")
@@ -619,15 +616,58 @@ class GameReferee:
         self._turn_log_summary = self._build_turn_log_summary(turn)
 
     def resolve_pending_kinetics(self, turn: int) -> None:
-        """Resolve kinetic approaches from the previous turn. Call at start of OPS phase."""
-        resolved = [a for a in self._pending_kinetic_approaches if a["declared_turn"] == turn - 1]
+        """Resolve kinetic approaches with 2-turn transit (declared N, resolves at N+2)."""
+        resolved = [
+            a for a in self._pending_kinetic_approaches
+            if a.get("approach_type", "kinetic") == "kinetic"
+            and a["declared_turn"] == turn - 2
+        ]
         for approach in resolved:
             self._resolve_kinetic_approach(approach)
         for a in resolved:
             self._pending_kinetic_approaches.remove(a)
 
+    def _resolve_pending_deniables(self, turn: int) -> None:
+        """Resolve delayed deniable co-orbital approaches (1-turn transit)."""
+        resolved = [a for a in self._pending_deniable_approaches if a["declared_turn"] == turn - 1]
+        for approach in resolved:
+            attacker_fid = approach["attacker_fid"]
+            target_fid = approach["target_fid"]
+            attacker_fs = self.faction_states.get(attacker_fid)
+            target_fs = self.faction_states.get(target_fid)
+            if not attacker_fs or not target_fs or attacker_fs.assets.asat_deniable == 0:
+                self._turn_log.append("Deniable co-orbital approach aborted — no assets remaining")
+                continue
+            result = self.sim.conflict_resolver.resolve_deniable_asat(
+                attacker_assets=attacker_fs.assets,
+                defender_sda_level=target_fs.sda_level(),
+            )
+            nodes_hit = min(result["nodes_destroyed"], target_fs.assets.leo_nodes)
+            target_fs.assets.leo_nodes -= nodes_hit
+            attacker_fs.assets.asat_deniable -= 1
+            self._debris_fields = self.sim.debris_engine.add_debris(
+                self._debris_fields, "leo",
+                self.sim.debris_engine.DEBRIS_PER_NODE_DENIABLE * nodes_hit
+            )
+            self.debris_level = max(self._debris_fields.values()) if self._debris_fields else 0.0
+            self._escalation_rung = max(self._escalation_rung, 3)
+            attacker_fs.disruption_score += nodes_hit * 5
+            detected = result["detected"]
+            attributed = result["attributed"]
+            suffix = (
+                f" ({'attributed to ' + attacker_fs.name if attributed else 'detected, origin unclear'})"
+                if detected else " (undetected)"
+            )
+            self._turn_log.append(
+                f"[DENIABLE] {attacker_fs.name} co-orbital op vs {target_fs.name}: "
+                f"{nodes_hit} nodes disrupted{suffix}"
+            )
+        for a in resolved:
+            self._pending_deniable_approaches.remove(a)
+
     async def _run_operations_phase(self, turn: int):
         self.resolve_pending_kinetics(turn)
+        self._resolve_pending_deniables(turn)
         decisions = await self._collect_decisions(
             Phase.OPERATIONS,
             ["task_assets", "coordinate", "gray_zone", "alliance_move", "signal"]
