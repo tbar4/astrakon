@@ -3,7 +3,7 @@ import uuid
 from pathlib import Path
 from typing import Optional
 
-from engine.state import Phase, Decision, FactionState, CoalitionState
+from engine.state import Phase, Decision, FactionState, CoalitionState, GameStateSnapshot
 from engine.simulation import SimulationEngine
 from engine.referee import GameReferee
 from agents.base import AgentInterface
@@ -66,6 +66,9 @@ def _make_referee(scenario: Scenario, agents: dict, state: GameState, audit: "Au
         pending_kinetic_approaches=state.pending_kinetic_approaches,
         current_turn=state.turn,
         initial_assets=state.initial_assets,
+        debris_fields=state.debris_fields,
+        escalation_rung=state.escalation_rung,
+        pending_deniable_approaches=state.pending_deniable_approaches,
     )
     return referee, audit
 
@@ -87,6 +90,9 @@ def _sync_state_from_referee(state: GameState, referee: GameReferee) -> None:
     state.event_sda_malus = mutable["event_sda_malus"]
     state.prev_turn_ops = mutable["prev_turn_ops"]
     state.pending_kinetic_approaches = mutable["pending_kinetic_approaches"]
+    state.debris_fields = mutable["debris_fields"]
+    state.escalation_rung = mutable["escalation_rung"]
+    state.pending_deniable_approaches = mutable["pending_deniable_approaches"]
 
 
 def _compute_dominance(state: GameState, sim: SimulationEngine) -> dict[str, float]:
@@ -292,9 +298,12 @@ async def advance(
                 Phase.OPERATIONS: ["task_assets", "coordinate", "gray_zone", "alliance_move", "signal"],
                 Phase.RESPONSE: ["escalate", "de_escalate", "retaliate", "public_statement"],
             }[state.current_phase]
-            state.human_snapshot = referee._build_snapshot(
-                next_fid, state.current_phase, available
-            ).model_dump()
+            snapshot = referee._build_snapshot(next_fid, state.current_phase, available)
+            state.human_snapshot = snapshot.model_dump()
+            state.human_adversary_estimates = {
+                fid: est
+                for fid, est in snapshot.adversary_estimates.items()
+            }
             await save_session(state, db_path=db_path)
             break  # waiting for human
 

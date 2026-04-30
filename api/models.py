@@ -1,6 +1,6 @@
 # api/models.py
 from typing import Optional, Any
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from engine.state import Phase, FactionState, CoalitionState, GameStateSnapshot
 
 
@@ -35,6 +35,13 @@ class GameState(BaseModel):
     coalition_colors: dict[str, str] = {}
     awaiting_next_turn: bool = False
     initial_assets: dict[str, dict] = {}  # faction_id → FactionAssets dict (for JFE computation)
+    debris_fields: dict[str, float] = Field(default_factory=dict)           # shell → debris severity
+    escalation_rung: int = 0                        # 0–5
+    access_windows: dict[str, bool] = Field(
+        default_factory=lambda: {"leo": True, "meo": True, "geo": True, "cislunar": True}
+    )
+    human_adversary_estimates: dict[str, dict] = Field(default_factory=dict) # human player's filtered view of adversaries
+    pending_deniable_approaches: list[dict] = Field(default_factory=list)    # delayed deniable co-orbital ops
 
 
 class ScenarioFactionSummary(BaseModel):
@@ -71,3 +78,8 @@ class DecideRequest(BaseModel):
 class GameStateResponse(BaseModel):
     state: GameState
     coalition_dominance: dict[str, float]
+
+
+class AarRequest(BaseModel):
+    focus: str = ""
+    force: bool = False

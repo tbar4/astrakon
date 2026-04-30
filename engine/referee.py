@@ -67,6 +67,9 @@ class GameReferee:
         self._event_sda_malus: dict[str, float] = {}
         self._prev_turn_ops: list[str] = []
         self._pending_kinetic_approaches: list[dict] = []
+        self._debris_fields: dict[str, float] = {}
+        self._escalation_rung: int = 0
+        self._pending_deniable_approaches: list[dict] = []
         self._current_turn: int = 0
         self._initial_dominance: dict[str, float] = {}
         self._initial_assets: dict[str, FactionAssets] = {}
@@ -85,6 +88,9 @@ class GameReferee:
         pending_kinetic_approaches: list,
         current_turn: int,
         initial_assets: dict | None = None,
+        debris_fields: dict | None = None,
+        escalation_rung: int = 0,
+        pending_deniable_approaches: list | None = None,
     ) -> None:
         """Populate internal state from serialized game state (used by web runner)."""
         from engine.state import FactionState, CoalitionState, FactionAssets
@@ -104,6 +110,9 @@ class GameReferee:
         self._event_sda_malus = dict(event_sda_malus)
         self._prev_turn_ops = list(prev_turn_ops)
         self._pending_kinetic_approaches = list(pending_kinetic_approaches)
+        self._debris_fields = dict(debris_fields) if debris_fields else {}
+        self._escalation_rung = escalation_rung
+        self._pending_deniable_approaches = list(pending_deniable_approaches) if pending_deniable_approaches else []
         self._current_turn = current_turn
         if initial_assets:
             self._initial_assets = {
@@ -128,6 +137,9 @@ class GameReferee:
             "event_sda_malus": dict(self._event_sda_malus),
             "prev_turn_ops": list(self._prev_turn_ops),
             "pending_kinetic_approaches": list(self._pending_kinetic_approaches),
+            "debris_fields": dict(self._debris_fields),
+            "escalation_rung": self._escalation_rung,
+            "pending_deniable_approaches": list(self._pending_deniable_approaches),
             "current_turn": self._current_turn,
         }
 
@@ -258,7 +270,7 @@ class GameReferee:
                 adversary_estimates[fid] = self.sim.sda_filter.filter(
                     adversary_assets=other_fs.assets,
                     observer_sda_level=effective_sda,
-                )
+                ).model_dump()
 
         # Detect incoming kinetic approaches if SDA sufficient
         incoming_threats = []
