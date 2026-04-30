@@ -6,6 +6,7 @@ import DominanceStrip from './DominanceStrip'
 import OpsTab from './OpsTab'
 import AARPanel from './AARPanel'
 import HoloOrbitalMap from './HoloOrbitalMap'
+import DeltaVGraph from './DeltaVGraph'
 
 type Tab = 'orbital' | 'deltav' | 'ops' | 'aar'
 
@@ -69,11 +70,14 @@ export default function MapTabContainer({
           />
         )}
         {activeTab === 'deltav' && (
-          <div className="panel" style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <span style={{ fontFamily: 'Courier New', fontSize: 10, color: '#334155' }}>
-              DELTA-V GRAPH — LOADING
-            </span>
-          </div>
+          <DeltaVGraph
+            gameState={gameState}
+            coalitionDominance={coalitionDominance}
+            selectedShell={selectedShell}
+            selectedFaction={selectedFaction}
+            onShellClick={setSelectedShell}
+            onFactionClick={setSelectedFaction}
+          />
         )}
         {activeTab === 'ops' && (
           <OpsTab
