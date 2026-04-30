@@ -71,6 +71,59 @@ class GameReferee:
         self._initial_dominance: dict[str, float] = {}
         self._initial_assets: dict[str, FactionAssets] = {}
 
+    def load_mutable_state(
+        self,
+        faction_states: dict,
+        coalition_states: dict,
+        tension_level: float,
+        debris_level: float,
+        turn_log: list,
+        turn_log_summary: str,
+        coordination_bonuses: dict,
+        event_sda_malus: dict,
+        prev_turn_ops: list,
+        pending_kinetic_approaches: list,
+        current_turn: int,
+    ) -> None:
+        """Populate internal state from serialized game state (used by web runner)."""
+        from engine.state import FactionState, CoalitionState
+        self.faction_states = {
+            fid: FactionState.model_validate(fs) if isinstance(fs, dict) else fs
+            for fid, fs in faction_states.items()
+        }
+        self.coalition_states = {
+            cid: CoalitionState.model_validate(cs) if isinstance(cs, dict) else cs
+            for cid, cs in coalition_states.items()
+        }
+        self.tension_level = tension_level
+        self.debris_level = debris_level
+        self._turn_log = list(turn_log)
+        self._turn_log_summary = turn_log_summary
+        self._coordination_bonuses = dict(coordination_bonuses)
+        self._event_sda_malus = dict(event_sda_malus)
+        self._prev_turn_ops = list(prev_turn_ops)
+        self._pending_kinetic_approaches = list(pending_kinetic_approaches)
+        self._current_turn = current_turn
+
+    def dump_mutable_state(self) -> dict:
+        """Return serializable dict of all mutable game state."""
+        return {
+            "faction_states": {
+                fid: fs.model_dump() for fid, fs in self.faction_states.items()
+            },
+            "coalition_states": {
+                cid: cs.model_dump() for cid, cs in self.coalition_states.items()
+            },
+            "tension_level": self.tension_level,
+            "debris_level": self.debris_level,
+            "turn_log": list(self._turn_log),
+            "turn_log_summary": self._turn_log_summary,
+            "coordination_bonuses": dict(self._coordination_bonuses),
+            "event_sda_malus": dict(self._event_sda_malus),
+            "prev_turn_ops": list(self._prev_turn_ops),
+            "pending_kinetic_approaches": list(self._pending_kinetic_approaches),
+        }
+
     async def run(self) -> GameResult:
         all_assets = {fid: fs.assets for fid, fs in self.faction_states.items()}
         self._initial_dominance = {
@@ -281,9 +334,11 @@ class GameReferee:
 
         return decisions
 
-    async def _run_investment_phase(self, turn: int):
-        decisions = await self._collect_decisions(Phase.INVEST, ["allocate_budget"])
-        for fid, decision in decisions.items():
+    async def resolve_investment(self, turn: int, decisions: dict) -> None:
+        """Resolve investment decisions (dict values may be Decision objects or JSON strings)."""
+        from engine.state import Decision
+        for fid, raw_decision in decisions.items():
+            decision = Decision.model_validate_json(raw_decision) if isinstance(raw_decision, str) else raw_decision
             if decision.investment:
                 fs = self.faction_states[fid]
                 result = self.sim.investment_resolver.resolve(
@@ -303,6 +358,10 @@ class GameReferee:
                 fs.deferred_returns.extend(result.deferred_returns)
                 fs.current_budget = max(0, fs.current_budget - result.budget_spent)
             await self.audit.write_decision(turn=turn, decision=decision)
+
+    async def _run_investment_phase(self, turn: int):
+        decisions = await self._collect_decisions(Phase.INVEST, ["allocate_budget"])
+        await self.resolve_investment(turn, decisions)
 
     def _resolve_kinetic_approach(self, approach: dict):
         attacker_fid = approach["attacker_fid"]
@@ -407,29 +466,19 @@ class GameReferee:
                     f"GPS jamming degrades {victim_name} SDA this turn (−15%)"
                 )
 
-    async def _run_operations_phase(self, turn: int):
-        # Resolve pending kinetic approaches from prior turn before new orders
-        resolved = [a for a in self._pending_kinetic_approaches if a["declared_turn"] == turn - 1]
-        for approach in resolved:
-            self._resolve_kinetic_approach(approach)
-        for a in resolved:
-            self._pending_kinetic_approaches.remove(a)
-
-        decisions = await self._collect_decisions(
-            Phase.OPERATIONS,
-            ["task_assets", "coordinate", "gray_zone", "alliance_move", "signal"]
-        )
-
+    async def resolve_operations(self, turn: int, decisions: dict) -> None:
+        """Resolve operations decisions. Call after pending kinetics are handled."""
+        from engine.state import Decision
         self._prev_turn_ops = []
         self._coordination_bonuses = {}
 
-        for fid, decision in decisions.items():
+        for fid, raw_decision in decisions.items():
+            decision = Decision.model_validate_json(raw_decision) if isinstance(raw_decision, str) else raw_decision
             if not decision.operations:
                 await self.audit.write_decision(turn=turn, decision=decision)
                 continue
 
             fs = self.faction_states[fid]
-
             for op in decision.operations:
                 target_fid = op.target_faction
                 target_fs = self.faction_states.get(target_fid) if target_fid else None
@@ -439,7 +488,6 @@ class GameReferee:
                 if op.action_type == "task_assets":
                     mission = op.parameters.get("mission", "")
                     if mission == "intercept" and is_adversary and fs.assets.asat_kinetic > 0:
-                        # Queue a kinetic strike — arrives next turn, detectable via SDA
                         self._pending_kinetic_approaches.append({
                             "attacker_fid": fid,
                             "target_fid": target_fid,
@@ -480,9 +528,7 @@ class GameReferee:
                         )
                     elif fs.assets.ew_jammers > 0:
                         self._prev_turn_ops.append("gray_zone")
-                        self._turn_log.append(
-                            f"{fs.name} EW jamming ops against {target_fs.name}"
-                        )
+                        self._turn_log.append(f"{fs.name} EW jamming ops against {target_fs.name}")
                     else:
                         self._prev_turn_ops.append("gray_zone")
                         self._turn_log.append(
@@ -492,17 +538,12 @@ class GameReferee:
                 elif op.action_type == "coordinate" and target_fid:
                     self._prev_turn_ops.append("coordinate")
                     if is_ally:
-                        # Loyalty pressure: under high tension, low-loyalty factions hedge
                         loyalty_factor = 1.0
                         if self.tension_level > 0.7 and fs.coalition_loyalty < 0.6:
                             loyalty_factor = 0.5
                         bonus = 0.1 * loyalty_factor
-                        self._coordination_bonuses[fid] = (
-                            self._coordination_bonuses.get(fid, 0.0) + bonus
-                        )
-                        self._coordination_bonuses[target_fid] = (
-                            self._coordination_bonuses.get(target_fid, 0.0) + bonus
-                        )
+                        self._coordination_bonuses[fid] = self._coordination_bonuses.get(fid, 0.0) + bonus
+                        self._coordination_bonuses[target_fid] = self._coordination_bonuses.get(target_fid, 0.0) + bonus
                         note = " (loyalty-degraded)" if loyalty_factor < 1.0 else ""
                         self._turn_log.append(
                             f"{fs.name} coordinated with {target_fs.name} "
@@ -512,13 +553,28 @@ class GameReferee:
                         self._turn_log.append(
                             f"{fs.name} attempted coordination with non-ally {target_fid} — ignored"
                         )
-
                 else:
                     self._prev_turn_ops.append(op.action_type)
 
             await self.audit.write_decision(turn=turn, decision=decision)
 
         self._turn_log_summary = self._build_turn_log_summary(turn)
+
+    def resolve_pending_kinetics(self, turn: int) -> None:
+        """Resolve kinetic approaches from the previous turn. Call at start of OPS phase."""
+        resolved = [a for a in self._pending_kinetic_approaches if a["declared_turn"] == turn - 1]
+        for approach in resolved:
+            self._resolve_kinetic_approach(approach)
+        for a in resolved:
+            self._pending_kinetic_approaches.remove(a)
+
+    async def _run_operations_phase(self, turn: int):
+        self.resolve_pending_kinetics(turn)
+        decisions = await self._collect_decisions(
+            Phase.OPERATIONS,
+            ["task_assets", "coordinate", "gray_zone", "alliance_move", "signal"]
+        )
+        await self.resolve_operations(turn, decisions)
 
     def _build_turn_log_summary(self, turn: int) -> str:
         if not self._turn_log:
@@ -529,9 +585,9 @@ class GameReferee:
             summary += f"\nCumulative debris field: {self.debris_level:.0%}"
         return summary
 
-    async def _run_response_phase(self, turn: int):
-        self._event_sda_malus = {}  # fresh each turn
-
+    def generate_turn_events(self, turn: int) -> list:
+        """Generate crisis events for this turn and apply their effects. Returns list of CrisisEvent."""
+        self._event_sda_malus = {}
         all_factions = list(self.faction_states.keys())
         events = self.event_library.generate_events(
             tension_level=self.tension_level,
@@ -540,29 +596,38 @@ class GameReferee:
             prev_ops=self._prev_turn_ops,
         )
         for event in events:
-            await self.audit.write_event(turn=turn, event=event)
-            for agent in self.agents.values():
-                agent.receive_event(event)
             if event.severity > 0.5:
                 self.tension_level = min(self.tension_level + 0.1, 1.0)
             self._apply_event_effect(event)
-
-        # Rebuild turn log summary to include event effects before response decisions
         self._turn_log_summary = self._build_turn_log_summary(turn)
+        return events
 
-        decisions = await self._collect_decisions(
-            Phase.RESPONSE,
-            ["escalate", "de_escalate", "retaliate", "emergency_reallocation", "public_statement"]
-        )
-        for fid, decision in decisions.items():
+    async def resolve_response(self, turn: int, decisions: dict, events: list) -> None:
+        """Resolve response decisions. Call after generate_turn_events."""
+        from engine.state import Decision
+        for event in events:
+            await self.audit.write_event(turn=turn, event=event)
+            for agent in self.agents.values():
+                agent.receive_event(event)
+
+        for fid, raw_decision in decisions.items():
+            decision = Decision.model_validate_json(raw_decision) if isinstance(raw_decision, str) else raw_decision
             if decision.response and decision.response.escalate:
                 self.tension_level = min(self.tension_level + 0.15, 1.0)
                 if decision.response.retaliate and decision.response.target_faction:
                     self._resolve_retaliation(fid, decision.response.target_faction)
             await self.audit.write_decision(turn=turn, decision=decision)
 
-        # Rebuild summary again to include retaliation entries
         self._turn_log_summary = self._build_turn_log_summary(turn)
+
+    async def _run_response_phase(self, turn: int):
+        events = self.generate_turn_events(turn)
+        self._turn_log_summary = self._build_turn_log_summary(turn)
+        decisions = await self._collect_decisions(
+            Phase.RESPONSE,
+            ["escalate", "de_escalate", "retaliate", "emergency_reallocation", "public_statement"]
+        )
+        await self.resolve_response(turn, decisions, events)
 
     def _update_faction_metrics(self):
         all_assets = {fid: fs.assets for fid, fs in self.faction_states.items()}
