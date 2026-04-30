@@ -77,7 +77,7 @@ export default function OrbitalMap({ gameState }: Props) {
   return (
     <div className="panel" style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
       <div className="panel-title">◆ ORBITAL MAP</div>
-      <svg viewBox="0 0 260 260" style={{ flex: 1, width: '100%' }}>
+      <svg viewBox="-14 -14 288 288" overflow="visible" style={{ flex: 1, width: '100%' }}>
         {/* Rings */}
         {RINGS.map(({ r, label }) => (
           <g key={r}>
@@ -96,12 +96,12 @@ export default function OrbitalMap({ gameState }: Props) {
         {/* Faction name labels — outside CIS ring */}
         {factions.map(([fid, fs], idx) => {
           const angle = idx * angleStep
-          const labelR = 126
+          const labelR = 122
           const lx = 130 + labelR * Math.cos(angle)
           const ly = 130 + labelR * Math.sin(angle)
           const { textAnchor, dominantBaseline } = factionLabelAnchor(angle)
           const color = factionColor(fid, gameState)
-          const label = fs.name.length > 14 ? fs.name.slice(0, 13) + '…' : fs.name
+          const label = fs.name.length > 12 ? fs.name.slice(0, 11) + '…' : fs.name
           return (
             <text key={`label-${fid}`} x={lx} y={ly} fill={color}
               fontSize={7} fontFamily="monospace"

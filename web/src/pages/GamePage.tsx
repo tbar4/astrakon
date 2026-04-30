@@ -124,25 +124,26 @@ export default function GamePage() {
         <span className="mono" style={{ color: '#64748b', fontSize: 10 }}>{gameState.scenario_name}</span>
       </div>
 
-      {/* 3-column layout */}
-      <div style={{ flex: 1, display: 'grid', gridTemplateColumns: '200px 1fr 220px', gap: 8, padding: 8, overflow: 'hidden', minHeight: 0 }}>
-        {/* Left: Faction Sidebar */}
-        <FactionSidebar
-          factionState={fs}
-          turn={gameState.turn}
-          totalTurns={gameState.total_turns}
-          tensionLevel={gameState.tension_level}
-        />
+      {/* Two-panel layout */}
+      <div style={{ flex: 1, display: 'flex', gap: 8, padding: 8, overflow: 'hidden', minHeight: 0 }}>
 
-        {/* Center: map left + decision panel right, both full height */}
-        <div style={{ display: 'flex', flexDirection: 'row', gap: 8, overflow: 'hidden', minHeight: 0 }}>
-          {/* Orbital map — fixed width, full height */}
-          <div style={{ flex: '0 0 44%', minHeight: 0 }}>
-            <OrbitalMap gameState={gameState} coalitionDominance={coalitionDominance} />
-          </div>
+        {/* LEFT PANEL: Orbital Map — dedicated full-height panel */}
+        <div style={{ flex: '0 0 40%', minHeight: 0 }}>
+          <OrbitalMap gameState={gameState} coalitionDominance={coalitionDominance} />
+        </div>
 
-          {/* Decision panel — remaining width, full height */}
-          <div className="panel" style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
+        {/* RIGHT PANEL: Faction info + Decision + Dominance */}
+        <div style={{ flex: 1, display: 'grid', gridTemplateColumns: '175px 1fr 165px', gap: 8, minHeight: 0, overflow: 'hidden' }}>
+          {/* Faction Sidebar */}
+          <FactionSidebar
+            factionState={fs}
+            turn={gameState.turn}
+            totalTurns={gameState.total_turns}
+            tensionLevel={gameState.tension_level}
+          />
+
+          {/* Decision panel */}
+          <div className="panel" style={{ overflowY: 'auto', minHeight: 0 }}>
             {error && (
               <div style={{ color: '#ff4499', fontSize: 11, marginBottom: 10, fontFamily: 'Courier New' }}>
                 ERROR: {error}
@@ -187,10 +188,10 @@ export default function GamePage() {
               />
             )}
           </div>
-        </div>
 
-        {/* Right: Dominance Rail */}
-        <DominanceRail gameState={gameState} coalitionDominance={coalitionDominance} />
+          {/* Dominance Rail */}
+          <DominanceRail gameState={gameState} coalitionDominance={coalitionDominance} />
+        </div>
       </div>
 
       {isLoading && <LoadingOverlay />}
