@@ -17,7 +17,8 @@ export default function GamePage() {
   const { sessionId } = useParams<{ sessionId: string }>()
   const navigate = useNavigate()
   const {
-    gameState, prevFactionStates, coalitionDominance, recommendation,
+    gameState, prevFactionStates, cumulativeAdded, cumulativeDestroyed,
+    coalitionDominance, recommendation,
     isLoading, error, showSummary,
     setGameState, setRecommendation, setLoading, setError, setShowSummary,
   } = useGameStore()
@@ -104,6 +105,12 @@ export default function GamePage() {
     Object.entries(gameState.faction_states).map(([fid, s]) => [fid, s.name])
   )
 
+  const isJammed = (() => {
+    const name = fs.name.toLowerCase()
+    const log = gameState.turn_log.join(' ').toLowerCase()
+    return log.includes(name) && (log.includes('jam') || log.includes('[ew]'))
+  })()
+
   return (
     <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
       {/* Header */}
@@ -137,6 +144,9 @@ export default function GamePage() {
                 turn={gameState.turn}
                 totalTurns={gameState.total_turns}
                 tensionLevel={gameState.tension_level}
+                cumulativeAdded={cumulativeAdded}
+                cumulativeDestroyed={cumulativeDestroyed}
+                isJammed={isJammed}
               />
             </div>
             <div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>

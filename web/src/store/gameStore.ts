@@ -1,10 +1,19 @@
 import { create } from 'zustand'
-import type { GameState, FactionState, Recommendation } from '../types'
+import type { GameState, FactionState, FactionAssets, Recommendation } from '../types'
+
+type AssetKey = keyof FactionAssets
+
+const ASSET_KEYS: AssetKey[] = [
+  'leo_nodes', 'meo_nodes', 'geo_nodes', 'cislunar_nodes',
+  'asat_kinetic', 'asat_deniable', 'ew_jammers', 'sda_sensors', 'launch_capacity',
+]
 
 interface GameStore {
   sessionId: string | null
   gameState: GameState | null
   prevFactionStates: Record<string, FactionState> | null
+  cumulativeAdded: Partial<Record<AssetKey, number>>
+  cumulativeDestroyed: Partial<Record<AssetKey, number>>
   coalitionDominance: Record<string, number>
   recommendation: Recommendation | null
   isLoading: boolean
@@ -24,6 +33,8 @@ export const useGameStore = create<GameStore>((set) => ({
   sessionId: null,
   gameState: null,
   prevFactionStates: null,
+  cumulativeAdded: {},
+  cumulativeDestroyed: {},
   coalitionDominance: {},
   recommendation: null,
   isLoading: false,
@@ -31,24 +42,46 @@ export const useGameStore = create<GameStore>((set) => ({
   showSummary: false,
 
   setSession: (sessionId, state, dominance) =>
-    set({ sessionId, gameState: state, prevFactionStates: null, coalitionDominance: dominance }),
+    set({ sessionId, gameState: state, prevFactionStates: null, cumulativeAdded: {}, cumulativeDestroyed: {}, coalitionDominance: dominance }),
 
   setGameState: (state, dominance) =>
-    set((prev) => ({
-      // Only snapshot on turn boundary — phase transitions within a turn don't count
-      prevFactionStates: state.turn > (prev.gameState?.turn ?? 0)
-        ? prev.gameState?.faction_states ?? null
-        : prev.prevFactionStates,
-      gameState: state,
-      coalitionDominance: dominance,
-    })),
+    set((prev) => {
+      const isTurnBoundary = state.turn > (prev.gameState?.turn ?? 0)
+
+      let cumulativeAdded = prev.cumulativeAdded
+      let cumulativeDestroyed = prev.cumulativeDestroyed
+
+      if (isTurnBoundary && prev.gameState) {
+        const humanId = prev.gameState.human_faction_id
+        const prevFs = prev.gameState.faction_states[humanId]
+        const currFs = state.faction_states[humanId]
+        if (prevFs && currFs) {
+          cumulativeAdded = { ...cumulativeAdded }
+          cumulativeDestroyed = { ...cumulativeDestroyed }
+          for (const key of ASSET_KEYS) {
+            const diff = currFs.assets[key] - prevFs.assets[key]
+            if (diff > 0) cumulativeAdded[key] = (cumulativeAdded[key] ?? 0) + diff
+            else if (diff < 0) cumulativeDestroyed[key] = (cumulativeDestroyed[key] ?? 0) + Math.abs(diff)
+          }
+        }
+      }
+
+      return {
+        prevFactionStates: isTurnBoundary ? prev.gameState?.faction_states ?? null : prev.prevFactionStates,
+        gameState: state,
+        coalitionDominance: dominance,
+        cumulativeAdded,
+        cumulativeDestroyed,
+      }
+    }),
 
   setRecommendation: (rec) => set({ recommendation: rec }),
   setLoading: (loading) => set({ isLoading: loading }),
   setError: (error) => set({ error }),
   setShowSummary: (show) => set({ showSummary: show }),
   reset: () => set({
-    sessionId: null, gameState: null, prevFactionStates: null, coalitionDominance: {},
-    recommendation: null, isLoading: false, error: null, showSummary: false,
+    sessionId: null, gameState: null, prevFactionStates: null,
+    cumulativeAdded: {}, cumulativeDestroyed: {},
+    coalitionDominance: {}, recommendation: null, isLoading: false, error: null, showSummary: false,
   }),
 }))
