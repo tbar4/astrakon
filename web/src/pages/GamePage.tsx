@@ -18,7 +18,7 @@ export default function GamePage() {
   const navigate = useNavigate()
   const {
     gameState, prevFactionStates, cumulativeAdded, cumulativeDestroyed,
-    coalitionDominance, recommendation,
+    turnHistory, coalitionDominance, recommendation,
     isLoading, error, showSummary,
     setGameState, setRecommendation, setLoading, setError, setShowSummary,
   } = useGameStore()
@@ -90,6 +90,25 @@ export default function GamePage() {
     void handleDecision(decision)
   }
 
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (isLoading) return
+      const tag = (e.target as HTMLElement).tagName
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return
+      if (e.key === 'a' || e.key === 'A') {
+        if (recommendation) handleAcceptAdvisor()
+      } else if (e.key === 'd' || e.key === 'D') {
+        if (recommendation) setRecommendation(null)
+      } else if (e.key === 'Enter') {
+        if (showSummary) void handleNextTurn()
+      } else if (e.key === 'Escape') {
+        navigate('/')
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [isLoading, recommendation, showSummary]) // eslint-disable-line react-hooks/exhaustive-deps
+
   if (!gameState) {
     return (
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh' }}>
@@ -129,6 +148,16 @@ export default function GamePage() {
         </span>
         <span style={{ flex: 1 }} />
         <span className="mono" style={{ color: '#64748b', fontSize: 10 }}>{gameState.scenario_name}</span>
+        <span className="mono" style={{ color: '#1e3a4a', fontSize: 9, letterSpacing: 1 }}>
+          [A] ACCEPT · [D] DISMISS · [↵] CONTINUE · [ESC] MENU
+        </span>
+        <button
+          className="btn-primary"
+          onClick={() => navigate('/')}
+          style={{ fontSize: 10, padding: '2px 10px', borderColor: '#334155', color: '#64748b' }}
+        >
+          ← MENU
+        </button>
       </div>
 
       {/* Two-panel layout */}
@@ -150,7 +179,7 @@ export default function GamePage() {
               />
             </div>
             <div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
-              <DominanceRail gameState={gameState} coalitionDominance={coalitionDominance} />
+              <DominanceRail gameState={gameState} coalitionDominance={coalitionDominance} turnHistory={turnHistory} />
             </div>
           </div>
 

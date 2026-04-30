@@ -8,12 +8,19 @@ const ASSET_KEYS: AssetKey[] = [
   'asat_kinetic', 'asat_deniable', 'ew_jammers', 'sda_sensors', 'launch_capacity',
 ]
 
+export interface TurnSnapshot {
+  turn: number
+  dominance: Record<string, number>
+  tension: number
+}
+
 interface GameStore {
   sessionId: string | null
   gameState: GameState | null
   prevFactionStates: Record<string, FactionState> | null
   cumulativeAdded: Partial<Record<AssetKey, number>>
   cumulativeDestroyed: Partial<Record<AssetKey, number>>
+  turnHistory: TurnSnapshot[]
   coalitionDominance: Record<string, number>
   recommendation: Recommendation | null
   isLoading: boolean
@@ -35,6 +42,7 @@ export const useGameStore = create<GameStore>((set) => ({
   prevFactionStates: null,
   cumulativeAdded: {},
   cumulativeDestroyed: {},
+  turnHistory: [],
   coalitionDominance: {},
   recommendation: null,
   isLoading: false,
@@ -42,7 +50,7 @@ export const useGameStore = create<GameStore>((set) => ({
   showSummary: false,
 
   setSession: (sessionId, state, dominance) =>
-    set({ sessionId, gameState: state, prevFactionStates: null, cumulativeAdded: {}, cumulativeDestroyed: {}, coalitionDominance: dominance }),
+    set({ sessionId, gameState: state, prevFactionStates: null, cumulativeAdded: {}, cumulativeDestroyed: {}, turnHistory: [], coalitionDominance: dominance }),
 
   setGameState: (state, dominance) =>
     set((prev) => {
@@ -50,8 +58,15 @@ export const useGameStore = create<GameStore>((set) => ({
 
       let cumulativeAdded = prev.cumulativeAdded
       let cumulativeDestroyed = prev.cumulativeDestroyed
+      let turnHistory = prev.turnHistory
 
       if (isTurnBoundary && prev.gameState) {
+        // Snapshot the completed turn before overwriting
+        turnHistory = [
+          ...turnHistory,
+          { turn: prev.gameState.turn, dominance: prev.coalitionDominance, tension: prev.gameState.tension_level },
+        ]
+
         const humanId = prev.gameState.human_faction_id
         const prevFs = prev.gameState.faction_states[humanId]
         const currFs = state.faction_states[humanId]
@@ -72,6 +87,7 @@ export const useGameStore = create<GameStore>((set) => ({
         coalitionDominance: dominance,
         cumulativeAdded,
         cumulativeDestroyed,
+        turnHistory,
       }
     }),
 
@@ -81,7 +97,7 @@ export const useGameStore = create<GameStore>((set) => ({
   setShowSummary: (show) => set({ showSummary: show }),
   reset: () => set({
     sessionId: null, gameState: null, prevFactionStates: null,
-    cumulativeAdded: {}, cumulativeDestroyed: {},
+    cumulativeAdded: {}, cumulativeDestroyed: {}, turnHistory: [],
     coalitionDominance: {}, recommendation: null, isLoading: false, error: null, showSummary: false,
   }),
 }))
