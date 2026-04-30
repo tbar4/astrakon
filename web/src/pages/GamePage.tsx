@@ -1,5 +1,5 @@
 // web/src/pages/GamePage.tsx
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { advance, decide, getRecommendation } from '../api/client'
 import { useGameStore } from '../store/gameStore'
@@ -89,8 +89,6 @@ export default function GamePage() {
     void handleDecision(decision)
   }
 
-  const [showMap, setShowMap] = useState(true)
-
   if (!gameState) {
     return (
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh' }}>
@@ -136,29 +134,14 @@ export default function GamePage() {
           tensionLevel={gameState.tension_level}
         />
 
-        {/* Center: collapsible Orbital Map + Phase Panel */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, overflow: 'hidden', minHeight: 0 }}>
-          {/* Map toggle bar */}
-          <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
-            <button
-              onClick={() => setShowMap((v) => !v)}
-              style={{
-                background: 'none', border: '1px solid #00d4ff22', color: '#00d4ff66',
-                fontFamily: 'Courier New', fontSize: 9, letterSpacing: 2, cursor: 'pointer',
-                padding: '3px 10px', borderRadius: 2,
-              }}
-            >
-              {showMap ? '▾ HIDE MAP' : '▸ SHOW MAP'}
-            </button>
+        {/* Center: map left + decision panel right, both full height */}
+        <div style={{ display: 'flex', flexDirection: 'row', gap: 8, overflow: 'hidden', minHeight: 0 }}>
+          {/* Orbital map — fixed width, full height */}
+          <div style={{ flex: '0 0 44%', minHeight: 0 }}>
+            <OrbitalMap gameState={gameState} coalitionDominance={coalitionDominance} />
           </div>
 
-          {showMap && (
-            <div style={{ height: 220, flexShrink: 0 }}>
-              <OrbitalMap gameState={gameState} coalitionDominance={coalitionDominance} />
-            </div>
-          )}
-
-          {/* Phase panel — takes all remaining space */}
+          {/* Decision panel — remaining width, full height */}
           <div className="panel" style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
             {error && (
               <div style={{ color: '#ff4499', fontSize: 11, marginBottom: 10, fontFamily: 'Courier New' }}>
