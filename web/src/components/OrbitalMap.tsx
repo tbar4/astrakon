@@ -57,9 +57,22 @@ function dotsOnRing(count: number, r: number, color: string, factionIdx: number,
   return elements
 }
 
+type TextAnchor = 'start' | 'end' | 'middle'
+type DominantBaseline = 'hanging' | 'auto' | 'middle'
+
+function factionLabelAnchor(angle: number): { textAnchor: TextAnchor; dominantBaseline: DominantBaseline } {
+  const cos = Math.cos(angle)
+  const sin = Math.sin(angle)
+  const textAnchor: TextAnchor = cos > 0.25 ? 'start' : cos < -0.25 ? 'end' : 'middle'
+  const dominantBaseline: DominantBaseline = sin > 0.25 ? 'hanging' : sin < -0.25 ? 'auto' : 'middle'
+  return { textAnchor, dominantBaseline }
+}
+
 export default function OrbitalMap({ gameState }: Props) {
   const factions = useMemo(() => Object.entries(gameState.faction_states), [gameState])
   const threats = gameState.human_snapshot?.incoming_threats ?? []
+
+  const angleStep = (Math.PI * 2) / Math.max(factions.length, 1)
 
   return (
     <div className="panel" style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
@@ -70,8 +83,8 @@ export default function OrbitalMap({ gameState }: Props) {
           <g key={r}>
             <circle cx={130} cy={130} r={r} fill="none"
               stroke="rgba(0,212,255,0.12)" strokeWidth={1} />
-            <text x={130 + r + 3} y={132} fill="rgba(0,212,255,0.35)"
-              fontSize={7} fontFamily="monospace">{label}</text>
+            <text x={130 + r + 3} y={132} fill="rgba(0,212,255,0.2)"
+              fontSize={6} fontFamily="monospace">{label}</text>
           </g>
         ))}
 
@@ -79,6 +92,25 @@ export default function OrbitalMap({ gameState }: Props) {
         <circle cx={130} cy={130} r={12} fill="#020b18" stroke="rgba(0,212,255,0.5)" strokeWidth={1.5} />
         <text x={130} y={134} fill="rgba(0,212,255,0.6)" fontSize={9}
           fontFamily="monospace" textAnchor="middle">⊕</text>
+
+        {/* Faction name labels — outside CIS ring */}
+        {factions.map(([fid, fs], idx) => {
+          const angle = idx * angleStep
+          const labelR = 126
+          const lx = 130 + labelR * Math.cos(angle)
+          const ly = 130 + labelR * Math.sin(angle)
+          const { textAnchor, dominantBaseline } = factionLabelAnchor(angle)
+          const color = factionColor(fid, gameState)
+          const label = fs.name.length > 14 ? fs.name.slice(0, 13) + '…' : fs.name
+          return (
+            <text key={`label-${fid}`} x={lx} y={ly} fill={color}
+              fontSize={7} fontFamily="monospace"
+              textAnchor={textAnchor} dominantBaseline={dominantBaseline}
+              style={{ opacity: 0.85 }}>
+              {label}
+            </text>
+          )
+        })}
 
         {/* Faction nodes */}
         {RINGS.map(({ r, key }) =>
