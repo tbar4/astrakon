@@ -98,6 +98,17 @@ export interface GameStateResponse {
   coalition_dominance: Record<string, number>
 }
 
+export interface SessionSummary {
+  session_id: string
+  scenario_name: string
+  turn: number
+  total_turns: number
+  game_over: boolean
+  human_faction_id: string
+  winner_coalition: string | null
+  updated_at: string
+}
+
 export interface ScenarioFaction {
   faction_id: string
   name: string

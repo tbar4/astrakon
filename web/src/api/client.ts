@@ -1,5 +1,5 @@
 import type {
-  ScenarioSummary, AgentConfig, GameStateResponse, Recommendation, Phase
+  ScenarioSummary, SessionSummary, AgentConfig, GameStateResponse, Recommendation, Phase
 } from '../types'
 
 const BASE = '/api'
@@ -14,6 +14,10 @@ async function json<T>(res: Response): Promise<T> {
 
 export async function listScenarios(): Promise<ScenarioSummary[]> {
   return json(await fetch(`${BASE}/scenarios`))
+}
+
+export async function listSessions(): Promise<SessionSummary[]> {
+  return json(await fetch(`${BASE}/sessions`))
 }
 
 export async function createGame(

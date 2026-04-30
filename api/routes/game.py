@@ -1,11 +1,60 @@
 # api/routes/game.py
+import json as _json
 from typing import Optional
+import aiosqlite
 from fastapi import APIRouter, HTTPException
 from api.models import CreateGameRequest, DecideRequest, GameStateResponse
 from api import runner
-from api.session import load_session
+from api.session import load_session, _DEFAULT_DB
 
 router = APIRouter()
+
+
+@router.get("/sessions")
+async def list_sessions():
+    try:
+        async with aiosqlite.connect(_DEFAULT_DB) as db:
+            await db.execute("""
+                CREATE TABLE IF NOT EXISTS sessions (
+                    session_id TEXT PRIMARY KEY,
+                    state_json TEXT NOT NULL,
+                    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+            async with db.execute("""
+                SELECT
+                    session_id,
+                    json_extract(state_json, '$.scenario_name') AS scenario_name,
+                    json_extract(state_json, '$.turn')          AS turn,
+                    json_extract(state_json, '$.total_turns')   AS total_turns,
+                    json_extract(state_json, '$.game_over')     AS game_over,
+                    json_extract(state_json, '$.human_faction_id') AS human_faction_id,
+                    json_extract(state_json, '$.result')        AS result_json,
+                    updated_at
+                FROM sessions
+                ORDER BY updated_at DESC
+            """) as cursor:
+                rows = await cursor.fetchall()
+        sessions = []
+        for row in rows:
+            result_json = row[6]
+            winner = None
+            if result_json:
+                result = _json.loads(result_json)
+                winner = result.get("winner_coalition")
+            sessions.append({
+                "session_id": row[0],
+                "scenario_name": row[1],
+                "turn": row[2],
+                "total_turns": row[3],
+                "game_over": bool(row[4]),
+                "human_faction_id": row[5],
+                "winner_coalition": winner,
+                "updated_at": row[7],
+            })
+        return sessions
+    except Exception:
+        return []
 
 
 @router.post("/game/create", response_model=GameStateResponse)
