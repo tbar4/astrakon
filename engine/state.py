@@ -168,7 +168,7 @@ class GameStateSnapshot(BaseModel):
     joint_force_effectiveness: float = 1.0
     incoming_threats: list[dict[str, Any]] = []  # kinetic approaches visible via SDA
     faction_names: dict[str, str] = {}  # faction_id -> display name for all factions
-    debris_fields: dict[str, float] = {}   # shell → severity 0.0–1.0
+    debris_fields: dict[str, float] = Field(default_factory=dict)  # shell → severity 0.0–1.0
     access_windows: dict[str, bool] = Field(
         default_factory=lambda: {"leo": True, "meo": True, "geo": True, "cislunar": True}
     )
