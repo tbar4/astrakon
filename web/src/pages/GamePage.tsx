@@ -1,5 +1,5 @@
 // web/src/pages/GamePage.tsx
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { advance, decide, getRecommendation } from '../api/client'
 import { useGameStore } from '../store/gameStore'
@@ -89,6 +89,8 @@ export default function GamePage() {
     void handleDecision(decision)
   }
 
+  const [showMap, setShowMap] = useState(true)
+
   if (!gameState) {
     return (
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh' }}>
@@ -108,8 +110,8 @@ export default function GamePage() {
     <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
       {/* Header */}
       <div style={{
-        padding: '8px 16px', borderBottom: '1px solid #00d4ff22',
-        display: 'flex', alignItems: 'center', gap: 16, background: '#020b18',
+        padding: '6px 16px', borderBottom: '1px solid #00d4ff22',
+        display: 'flex', alignItems: 'center', gap: 16, background: '#020b18', flexShrink: 0,
       }}>
         <span className="mono" style={{ color: '#00d4ff', fontSize: 13, letterSpacing: 4 }}>◆ ASTRAKON</span>
         <span className="mono" style={{ color: '#334155', fontSize: 10 }}>·</span>
@@ -125,7 +127,7 @@ export default function GamePage() {
       </div>
 
       {/* 3-column layout */}
-      <div style={{ flex: 1, display: 'grid', gridTemplateColumns: '200px 1fr 200px', gap: 8, padding: 8, overflow: 'hidden' }}>
+      <div style={{ flex: 1, display: 'grid', gridTemplateColumns: '200px 1fr 220px', gap: 8, padding: 8, overflow: 'hidden', minHeight: 0 }}>
         {/* Left: Faction Sidebar */}
         <FactionSidebar
           factionState={fs}
@@ -134,12 +136,30 @@ export default function GamePage() {
           tensionLevel={gameState.tension_level}
         />
 
-        {/* Center: Orbital Map + Phase Panel */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, overflow: 'hidden' }}>
-          <div style={{ flex: '0 0 45%' }}>
-            <OrbitalMap gameState={gameState} coalitionDominance={coalitionDominance} />
+        {/* Center: collapsible Orbital Map + Phase Panel */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, overflow: 'hidden', minHeight: 0 }}>
+          {/* Map toggle bar */}
+          <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
+            <button
+              onClick={() => setShowMap((v) => !v)}
+              style={{
+                background: 'none', border: '1px solid #00d4ff22', color: '#00d4ff66',
+                fontFamily: 'Courier New', fontSize: 9, letterSpacing: 2, cursor: 'pointer',
+                padding: '3px 10px', borderRadius: 2,
+              }}
+            >
+              {showMap ? '▾ HIDE MAP' : '▸ SHOW MAP'}
+            </button>
           </div>
-          <div className="panel" style={{ flex: 1, overflowY: 'auto' }}>
+
+          {showMap && (
+            <div style={{ height: 220, flexShrink: 0 }}>
+              <OrbitalMap gameState={gameState} coalitionDominance={coalitionDominance} />
+            </div>
+          )}
+
+          {/* Phase panel — takes all remaining space */}
+          <div className="panel" style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
             {error && (
               <div style={{ color: '#ff4499', fontSize: 11, marginBottom: 10, fontFamily: 'Courier New' }}>
                 ERROR: {error}
