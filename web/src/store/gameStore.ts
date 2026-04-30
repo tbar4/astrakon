@@ -1,9 +1,10 @@
 import { create } from 'zustand'
-import type { GameState, Recommendation } from '../types'
+import type { GameState, FactionState, Recommendation } from '../types'
 
 interface GameStore {
   sessionId: string | null
   gameState: GameState | null
+  prevFactionStates: Record<string, FactionState> | null
   coalitionDominance: Record<string, number>
   recommendation: Recommendation | null
   isLoading: boolean
@@ -22,6 +23,7 @@ interface GameStore {
 export const useGameStore = create<GameStore>((set) => ({
   sessionId: null,
   gameState: null,
+  prevFactionStates: null,
   coalitionDominance: {},
   recommendation: null,
   isLoading: false,
@@ -29,17 +31,24 @@ export const useGameStore = create<GameStore>((set) => ({
   showSummary: false,
 
   setSession: (sessionId, state, dominance) =>
-    set({ sessionId, gameState: state, coalitionDominance: dominance }),
+    set({ sessionId, gameState: state, prevFactionStates: null, coalitionDominance: dominance }),
 
   setGameState: (state, dominance) =>
-    set({ gameState: state, coalitionDominance: dominance }),
+    set((prev) => ({
+      // Only snapshot on turn boundary — phase transitions within a turn don't count
+      prevFactionStates: state.turn > (prev.gameState?.turn ?? 0)
+        ? prev.gameState?.faction_states ?? null
+        : prev.prevFactionStates,
+      gameState: state,
+      coalitionDominance: dominance,
+    })),
 
   setRecommendation: (rec) => set({ recommendation: rec }),
   setLoading: (loading) => set({ isLoading: loading }),
   setError: (error) => set({ error }),
   setShowSummary: (show) => set({ showSummary: show }),
   reset: () => set({
-    sessionId: null, gameState: null, coalitionDominance: {},
+    sessionId: null, gameState: null, prevFactionStates: null, coalitionDominance: {},
     recommendation: null, isLoading: false, error: null, showSummary: false,
   }),
 }))

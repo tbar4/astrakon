@@ -7,7 +7,7 @@ interface Props {
 }
 
 export default function DominanceRail({ gameState, coalitionDominance }: Props) {
-  const { coalition_states, coalition_colors, victory_threshold, events, turn_log } = gameState
+  const { coalition_states, coalition_colors, victory_threshold, events } = gameState
 
   return (
     <div className="panel" style={{ overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -59,21 +59,6 @@ export default function DominanceRail({ gameState, coalitionDominance }: Props) 
         </div>
       )}
 
-      {turn_log.length > 0 && (
-        <div>
-          <div className="panel-title">◆ OPS LOG</div>
-          {turn_log.slice(-8).map((entry, i) => {
-            const color = entry.includes('[KINETIC]') || entry.includes('[RETALIATION') ? '#ff4499'
-              : entry.includes('disrupted') || entry.includes('gray-zone') ? '#f59e0b'
-              : '#475569'
-            return (
-              <div key={i} style={{ fontSize: 10, color, marginBottom: 2, fontFamily: 'Courier New' }}>
-                {entry}
-              </div>
-            )
-          })}
-        </div>
-      )}
     </div>
   )
 }

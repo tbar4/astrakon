@@ -17,7 +17,7 @@ export default function GamePage() {
   const { sessionId } = useParams<{ sessionId: string }>()
   const navigate = useNavigate()
   const {
-    gameState, coalitionDominance, recommendation,
+    gameState, prevFactionStates, coalitionDominance, recommendation,
     isLoading, error, showSummary,
     setGameState, setRecommendation, setLoading, setError, setShowSummary,
   } = useGameStore()
@@ -127,26 +127,41 @@ export default function GamePage() {
       {/* Two-panel layout */}
       <div style={{ flex: 1, display: 'flex', gap: 8, padding: 8, overflow: 'hidden', minHeight: 0 }}>
 
-        {/* LEFT PANEL: faction info box → orbital map → dominance box */}
-        <div style={{ flex: '0 0 42%', display: 'flex', flexDirection: 'column', gap: 8, minHeight: 0, overflow: 'hidden' }}>
-          {/* Top box: faction assets & metrics */}
-          <div style={{ flex: '0 1 auto', maxHeight: '32%', overflowY: 'auto', minHeight: 0 }}>
-            <FactionSidebar
-              factionState={fs}
-              turn={gameState.turn}
-              totalTurns={gameState.total_turns}
-              tensionLevel={gameState.tension_level}
-            />
+        {/* LEFT PANEL */}
+        <div style={{ flex: 2, display: 'flex', flexDirection: 'column', gap: 8, minHeight: 0, overflow: 'hidden' }}>
+          {/* Top box: faction info + coalition dominance side by side */}
+          <div style={{ flex: '0 1 auto', maxHeight: '45%', minHeight: 0, display: 'flex', flexDirection: 'row', gap: 8, overflow: 'hidden' }}>
+            <div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
+              <FactionSidebar
+                factionState={fs}
+                turn={gameState.turn}
+                totalTurns={gameState.total_turns}
+                tensionLevel={gameState.tension_level}
+              />
+            </div>
+            <div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
+              <DominanceRail gameState={gameState} coalitionDominance={coalitionDominance} />
+            </div>
           </div>
 
           {/* Center: orbital map fills remaining space */}
           <div style={{ flex: 1, minHeight: 0 }}>
-            <OrbitalMap gameState={gameState} coalitionDominance={coalitionDominance} />
+            <OrbitalMap gameState={gameState} coalitionDominance={coalitionDominance} prevFactionStates={prevFactionStates} />
           </div>
 
-          {/* Bottom box: coalition dominance & events */}
-          <div style={{ flex: '0 1 auto', maxHeight: '28%', overflowY: 'auto', minHeight: 0 }}>
-            <DominanceRail gameState={gameState} coalitionDominance={coalitionDominance} />
+          {/* Bottom box: ops log */}
+          <div className="panel" style={{ flex: '0 1 auto', maxHeight: '22%', overflowY: 'auto', minHeight: 0 }}>
+            <div className="panel-title">◆ OPS LOG</div>
+            {gameState.turn_log.slice(-10).map((entry, i) => {
+              const color = entry.includes('[KINETIC]') || entry.includes('[RETALIATION') ? '#ff4499'
+                : entry.includes('disrupted') || entry.includes('gray-zone') ? '#f59e0b'
+                : '#475569'
+              return (
+                <div key={i} style={{ fontSize: 10, color, marginBottom: 2, fontFamily: 'Courier New' }}>
+                  {entry}
+                </div>
+              )
+            })}
           </div>
         </div>
 
