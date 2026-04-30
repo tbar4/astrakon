@@ -1,0 +1,60 @@
+@import "tailwindcss";
+
+:root {
+  --color-bg: #020b18;
+  --color-accent: #00d4ff;
+  --color-green: #00ff88;
+  --color-red: #ff4499;
+  --color-border: rgba(0, 212, 255, 0.2);
+}
+
+body {
+  background-color: var(--color-bg);
+  color: #94a3b8;
+  font-family: system-ui, sans-serif;
+  margin: 0;
+}
+
+.mono { font-family: 'Courier New', monospace; }
+
+.glow-cyan { box-shadow: 0 0 8px rgba(0, 212, 255, 0.4); }
+.glow-green { box-shadow: 0 0 8px rgba(0, 255, 136, 0.4); }
+.glow-red   { box-shadow: 0 0 8px rgba(255, 68, 153, 0.4); }
+
+.panel {
+  background: rgba(2, 11, 24, 0.9);
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  padding: 12px;
+}
+
+.panel-title {
+  font-family: 'Courier New', monospace;
+  font-size: 10px;
+  letter-spacing: 3px;
+  color: var(--color-accent);
+  text-transform: uppercase;
+  margin-bottom: 10px;
+}
+
+.btn-primary {
+  background: rgba(0, 212, 255, 0.15);
+  border: 1px solid var(--color-accent);
+  color: var(--color-accent);
+  padding: 8px 20px;
+  font-family: 'Courier New', monospace;
+  font-size: 12px;
+  letter-spacing: 2px;
+  cursor: pointer;
+  border-radius: 2px;
+  transition: background 0.2s;
+}
+
+.btn-primary:hover {
+  background: rgba(0, 212, 255, 0.25);
+}
+
+.btn-primary:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
