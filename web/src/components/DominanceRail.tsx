@@ -10,7 +10,7 @@ export default function DominanceRail({ gameState, coalitionDominance }: Props) 
   const { coalition_states, coalition_colors, victory_threshold, events, turn_log } = gameState
 
   return (
-    <div className="panel" style={{ height: '100%', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 16 }}>
+    <div className="panel" style={{ overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 12 }}>
       <div>
         <div className="panel-title">◆ DOMINANCE</div>
         {Object.entries(coalition_states).map(([cid, cs]) => {

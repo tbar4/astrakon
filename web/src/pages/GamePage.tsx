@@ -127,70 +127,74 @@ export default function GamePage() {
       {/* Two-panel layout */}
       <div style={{ flex: 1, display: 'flex', gap: 8, padding: 8, overflow: 'hidden', minHeight: 0 }}>
 
-        {/* LEFT PANEL: Orbital Map — dedicated full-height panel */}
-        <div style={{ flex: '0 0 40%', minHeight: 0 }}>
-          <OrbitalMap gameState={gameState} coalitionDominance={coalitionDominance} />
-        </div>
-
-        {/* RIGHT PANEL: Faction info + Decision + Dominance */}
-        <div style={{ flex: 1, display: 'grid', gridTemplateColumns: '175px 1fr 165px', gap: 8, minHeight: 0, overflow: 'hidden' }}>
-          {/* Faction Sidebar */}
-          <FactionSidebar
-            factionState={fs}
-            turn={gameState.turn}
-            totalTurns={gameState.total_turns}
-            tensionLevel={gameState.tension_level}
-          />
-
-          {/* Decision panel */}
-          <div className="panel" style={{ overflowY: 'auto', minHeight: 0 }}>
-            {error && (
-              <div style={{ color: '#ff4499', fontSize: 11, marginBottom: 10, fontFamily: 'Courier New' }}>
-                ERROR: {error}
-                <button className="btn-primary" onClick={() => { setError(null); void handleNextTurn() }}
-                  style={{ marginLeft: 10, fontSize: 10, padding: '2px 8px' }}>
-                  RETRY
-                </button>
-              </div>
-            )}
-
-            {recommendation && (
-              <AdvisorPanel
-                recommendation={recommendation}
-                phase={phase as 'invest' | 'operations' | 'response'}
-                onAccept={handleAcceptAdvisor}
-                onDismiss={() => setRecommendation(null)}
-              />
-            )}
-
-            {phase === 'invest' && (
-              <InvestPanel
-                budget={fs.current_budget}
-                onSubmit={handleDecision}
-                disabled={isLoading}
-              />
-            )}
-            {phase === 'operations' && (
-              <OpsPanel
-                factionNames={factionNames}
-                humanFactionId={gameState.human_faction_id}
-                onSubmit={handleDecision}
-                disabled={isLoading}
-              />
-            )}
-            {phase === 'response' && (
-              <ResponsePanel
-                factionNames={factionNames}
-                humanFactionId={gameState.human_faction_id}
-                turnLogSummary={snap?.turn_log_summary ?? ''}
-                onSubmit={handleDecision}
-                disabled={isLoading}
-              />
-            )}
+        {/* LEFT PANEL: faction info box → orbital map → dominance box */}
+        <div style={{ flex: '0 0 42%', display: 'flex', flexDirection: 'column', gap: 8, minHeight: 0, overflow: 'hidden' }}>
+          {/* Top box: faction assets & metrics */}
+          <div style={{ flex: '0 1 auto', maxHeight: '32%', overflowY: 'auto', minHeight: 0 }}>
+            <FactionSidebar
+              factionState={fs}
+              turn={gameState.turn}
+              totalTurns={gameState.total_turns}
+              tensionLevel={gameState.tension_level}
+            />
           </div>
 
-          {/* Dominance Rail */}
-          <DominanceRail gameState={gameState} coalitionDominance={coalitionDominance} />
+          {/* Center: orbital map fills remaining space */}
+          <div style={{ flex: 1, minHeight: 0 }}>
+            <OrbitalMap gameState={gameState} coalitionDominance={coalitionDominance} />
+          </div>
+
+          {/* Bottom box: coalition dominance & events */}
+          <div style={{ flex: '0 1 auto', maxHeight: '28%', overflowY: 'auto', minHeight: 0 }}>
+            <DominanceRail gameState={gameState} coalitionDominance={coalitionDominance} />
+          </div>
+        </div>
+
+        {/* RIGHT PANEL: decision area only */}
+        <div className="panel" style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
+          {error && (
+            <div style={{ color: '#ff4499', fontSize: 11, marginBottom: 10, fontFamily: 'Courier New' }}>
+              ERROR: {error}
+              <button className="btn-primary" onClick={() => { setError(null); void handleNextTurn() }}
+                style={{ marginLeft: 10, fontSize: 10, padding: '2px 8px' }}>
+                RETRY
+              </button>
+            </div>
+          )}
+
+          {recommendation && (
+            <AdvisorPanel
+              recommendation={recommendation}
+              phase={phase as 'invest' | 'operations' | 'response'}
+              onAccept={handleAcceptAdvisor}
+              onDismiss={() => setRecommendation(null)}
+            />
+          )}
+
+          {phase === 'invest' && (
+            <InvestPanel
+              budget={fs.current_budget}
+              onSubmit={handleDecision}
+              disabled={isLoading}
+            />
+          )}
+          {phase === 'operations' && (
+            <OpsPanel
+              factionNames={factionNames}
+              humanFactionId={gameState.human_faction_id}
+              onSubmit={handleDecision}
+              disabled={isLoading}
+            />
+          )}
+          {phase === 'response' && (
+            <ResponsePanel
+              factionNames={factionNames}
+              humanFactionId={gameState.human_faction_id}
+              turnLogSummary={snap?.turn_log_summary ?? ''}
+              onSubmit={handleDecision}
+              disabled={isLoading}
+            />
+          )}
         </div>
       </div>
 

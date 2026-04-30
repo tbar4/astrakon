@@ -25,7 +25,7 @@ export default function FactionSidebar({ factionState: fs, turn, totalTurns, ten
   ] as const
 
   return (
-    <div className="panel" style={{ height: '100%', overflowY: 'auto' }}>
+    <div className="panel" style={{ overflowY: 'auto' }}>
       <div className="panel-title">◆ {fs.name}</div>
 
       <div className="mono" style={{ fontSize: 10, color: '#64748b', marginBottom: 8 }}>
