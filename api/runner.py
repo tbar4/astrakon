@@ -113,7 +113,7 @@ async def create_game(
     scenario = _load_scenario(scenario_id)
     session_id = str(uuid.uuid4())
     human_faction_ids = [c["faction_id"] for c in agent_config if c["agent_type"] == "web"]
-    human_faction_id = human_faction_ids[0]
+    human_faction_id = human_faction_ids[0] if human_faction_ids else agent_config[0]["faction_id"]
     use_advisor = next(
         (c.get("use_advisor", False) for c in agent_config if c["faction_id"] == human_faction_id),
         False,
