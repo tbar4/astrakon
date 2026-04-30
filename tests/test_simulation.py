@@ -57,3 +57,49 @@ def test_orbital_dominance_calculation():
     }
     dominance = engine.compute_orbital_dominance("ussf", faction_assets)
     assert dominance > 0.5
+
+
+from engine.simulation import DebrisEngine
+
+def test_debris_engine_add_debris_to_shell():
+    engine = DebrisEngine()
+    fields = engine.add_debris({}, "leo", 0.3)
+    assert abs(fields["leo"] - 0.3) < 0.01
+
+def test_debris_engine_clamps_at_1():
+    engine = DebrisEngine()
+    fields = engine.add_debris({"leo": 0.8}, "leo", 0.5)
+    assert fields["leo"] == 1.0
+
+def test_debris_engine_decay_reduces_severity():
+    engine = DebrisEngine()
+    fields = {"leo": 0.5, "geo": 0.3}
+    decayed = engine.decay(fields)
+    assert decayed["leo"] < 0.5
+    assert decayed["geo"] < 0.3
+
+def test_debris_engine_leo_decays_faster_than_geo():
+    engine = DebrisEngine()
+    fields = {"leo": 0.5, "geo": 0.5}
+    decayed = engine.decay(fields)
+    assert decayed["leo"] < decayed["geo"]
+
+def test_debris_engine_kessler_shell_unusable():
+    engine = DebrisEngine()
+    penalty = engine.operational_penalty({"leo": 0.9}, "leo")
+    assert penalty >= 1.0
+
+def test_debris_engine_apply_effects_damages_nodes():
+    import random
+    random.seed(42)
+    engine = DebrisEngine()
+    from engine.state import FactionState, FactionAssets
+    faction_states = {
+        "ussf": FactionState(faction_id="ussf", name="USSF",
+                             budget_per_turn=100, current_budget=100,
+                             assets=FactionAssets(leo_nodes=20)),
+    }
+    fields = {"leo": 0.9}  # near Kessler
+    updated, log = engine.apply_debris_effects(faction_states, fields)
+    assert updated["ussf"].assets.leo_nodes < 20
+    assert len(log) > 0

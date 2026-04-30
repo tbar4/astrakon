@@ -187,11 +187,64 @@ class ConflictResolver:
         }
 
 
+class DebrisEngine:
+    SHELLS = ["leo", "meo", "geo", "cislunar"]
+    # LEO debris decays fast (atmospheric drag); cislunar is permanent on human timescales
+    DECAY_RATE: dict[str, float] = {"leo": 0.06, "meo": 0.025, "geo": 0.01, "cislunar": 0.004}
+    KESSLER_THRESHOLD = 0.8        # at or above this, shell is effectively unusable
+    DEBRIS_PER_NODE_KINETIC = 0.12 # each node destroyed by kinetic adds this much debris
+    DEBRIS_PER_NODE_DENIABLE = 0.05
+
+    def add_debris(self, fields: dict[str, float], shell: str, amount: float) -> dict[str, float]:
+        result = dict(fields)
+        result[shell] = min(result.get(shell, 0.0) + amount, 1.0)
+        return result
+
+    def decay(self, fields: dict[str, float]) -> dict[str, float]:
+        return {
+            shell: max(0.0, sev - self.DECAY_RATE.get(shell, 0.02))
+            for shell, sev in fields.items()
+        }
+
+    def operational_penalty(self, fields: dict[str, float], shell: str) -> float:
+        """Probability 0.0–1.0 that a node in this shell is disrupted per turn."""
+        sev = fields.get(shell, 0.0)
+        if sev >= self.KESSLER_THRESHOLD:
+            return 1.0
+        return sev * 0.5  # linear: 50% disruption at Kessler threshold
+
+    def apply_debris_effects(
+        self, faction_states: dict, fields: dict[str, float]
+    ) -> tuple[dict, list[str]]:
+        import random
+        log: list[str] = []
+        shell_attr = {
+            "leo": "leo_nodes", "meo": "meo_nodes",
+            "geo": "geo_nodes", "cislunar": "cislunar_nodes",
+        }
+        for shell in self.SHELLS:
+            penalty = self.operational_penalty(fields, shell)
+            if penalty == 0:
+                continue
+            attr = shell_attr[shell]
+            for fid, fs in faction_states.items():
+                nodes = getattr(fs.assets, attr)
+                if nodes > 0 and random.random() < penalty:
+                    lost = max(1, round(nodes * min(penalty, 0.5) * 0.25))
+                    setattr(fs.assets, attr, max(0, nodes - lost))
+                    label = "UNUSABLE — KESSLER" if penalty >= 1.0 else f"{penalty:.0%} debris hazard"
+                    log.append(
+                        f"Debris field ({shell.upper()} {label}): {fs.name} lost {lost} nodes"
+                    )
+        return faction_states, log
+
+
 class SimulationEngine:
     def __init__(self):
         self.investment_resolver = InvestmentResolver()
         self.sda_filter = SDAFilter()
         self.conflict_resolver = ConflictResolver()
+        self.debris_engine = DebrisEngine()
 
     def compute_orbital_dominance(
         self, faction_id: str, all_assets: dict[str, FactionAssets]
