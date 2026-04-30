@@ -120,8 +120,22 @@ export default function DominanceRail({ gameState, coalitionDominance, turnHisto
             {(['leo', 'meo', 'geo', 'cislunar'] as const).map((shell) => {
               const open = gameState.access_windows[shell]
               const debris = gameState.debris_fields?.[shell] ?? 0
-              const color = debris >= 0.8 ? '#ef4444' : open ? '#00ff88' : '#334155'
-              const label = debris >= 0.8 ? 'KESSLER' : open ? 'OPEN' : 'CLOSED'
+              const kessler = debris >= 0.8
+              const color = kessler ? '#ef4444' : open ? '#00ff88' : '#334155'
+              const label = kessler ? 'KESSLER' : open ? 'OPEN' : 'CLOSED'
+              const turn = gameState.turn
+              const nextOpen = (() => {
+                if (open || kessler) return null
+                switch (shell) {
+                  case 'leo': return turn + 1
+                  case 'meo': return turn + 1
+                  case 'cislunar': {
+                    const k = ((1 - (turn % 4)) + 4) % 4 || 4
+                    return turn + k
+                  }
+                  default: return null
+                }
+              })()
               return (
                 <div key={shell} style={{ textAlign: 'center' }}>
                   <div style={{ fontFamily: 'Courier New', fontSize: 8, color, letterSpacing: 1 }}>
@@ -130,6 +144,11 @@ export default function DominanceRail({ gameState, coalitionDominance, turnHisto
                   <div style={{ fontFamily: 'Courier New', fontSize: 7, color, marginTop: 1 }}>
                     {label}
                   </div>
+                  {nextOpen !== null && (
+                    <div style={{ fontFamily: 'Courier New', fontSize: 7, color: '#64748b', marginTop: 1 }}>
+                      T{nextOpen}
+                    </div>
+                  )}
                   {debris > 0 && (
                     <div style={{ fontFamily: 'Courier New', fontSize: 7, color: '#ef4444', marginTop: 1 }}>
                       {Math.round(debris * 100)}%
