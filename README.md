@@ -6,6 +6,12 @@ Built to explore agentic AI patterns and space strategy concepts.
 
 ---
 
+## Name
+
+A coinage from **astra** (Latin/Greek for "stars," as in *ad astra*) and the Greek **‑on** suffix found in instruments and constructs (compare *astrolabon*, *polygon*) — roughly "star‑instrument" or "thing of the stars," fitting an orbital strategy sim.
+
+---
+
 ## Scenarios
 
 | Scenario | Setting | Factions |
