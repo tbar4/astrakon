@@ -1,11 +1,11 @@
 // web/src/components/HoloOrbitalMap.tsx
-import { useMemo } from 'react'
+import React, { useState, useMemo } from 'react'
 import type { GameState, FactionState } from '../types'
 
 export const TILT_FACTOR = 0.45
 const CX = 130
 const CY = 130
-const DOT_CAP = 8; void DOT_CAP // used in Task 7 for node overflow badge
+const DOT_CAP = 8
 
 const RINGS = [
   { label: 'LEO', r: 48,  sw: 1,   dash: undefined as string | undefined, nodeKey: 'leo_nodes' as const, icon: '◎', shell: 'leo' as const },
@@ -73,6 +73,89 @@ function labelAnchor(angle: number): { textAnchor: TextAnchor; dominantBaseline:
   }
 }
 
+interface NodeDelta { delta: number; jammed: boolean }
+
+function computeNodeDelta(
+  fid: string,
+  ringKey: 'leo_nodes' | 'meo_nodes' | 'geo_nodes' | 'cislunar_nodes',
+  gs: GameState,
+  prev: Record<string, FactionState> | null,
+): NodeDelta {
+  const curr = gs.faction_states[fid]
+  const name = curr?.name.toLowerCase() ?? ''
+  const log = gs.turn_log.join(' ').toLowerCase()
+  const jammed = !!(name && log.includes(name) && (log.includes('jam') || log.includes('[ew]')))
+  if (!prev || !curr) return { delta: 0, jammed }
+  const prevFs = prev[fid]
+  if (!prevFs) return { delta: 0, jammed }
+  return { delta: curr.assets[ringKey] - prevFs.assets[ringKey], jammed }
+}
+
+function dotsOnEllipse(
+  count: number,
+  r: number,
+  color: string,
+  factionIdx: number,
+  totalFactions: number,
+  { delta, jammed }: NodeDelta,
+  uncertain = false,
+): React.ReactElement[] {
+  const visible = Math.min(count, DOT_CAP)
+  const angleStep = (Math.PI * 2) / Math.max(totalFactions, 1)
+  const baseAngle = factionIdx * angleStep
+  const spreadAngle = angleStep * 0.6
+  const elements: React.ReactElement[] = []
+  const addedVisible = delta > 0 ? Math.min(delta, visible) : 0
+
+  for (let i = 0; i < visible; i++) {
+    const angle = baseAngle + (visible === 1 ? 0 : (i / (visible - 1) - 0.5) * spreadAngle)
+    const { x: cx, y: cy } = ellipsePoint(r, angle)
+    const isNew = i >= visible - addedVisible
+
+    let stroke = 'none'
+    let strokeWidth = 0
+    let strokeDasharray: string | undefined
+
+    if (jammed) { stroke = '#555555'; strokeWidth = 1.5; strokeDasharray = '2 2' }
+    else if (isNew) { stroke = '#003399'; strokeWidth = 2 }
+
+    elements.push(
+      uncertain
+        ? <circle key={i} cx={cx} cy={cy} r={3}
+            fill="none" stroke="#475569" strokeWidth={1} strokeDasharray="1,1" opacity={0.4} />
+        : <circle key={i} cx={cx} cy={cy} r={3} fill={color}
+            stroke={stroke} strokeWidth={strokeWidth} strokeDasharray={strokeDasharray}
+            style={{ filter: `drop-shadow(0 0 3px ${color})` }} />
+    )
+  }
+
+  if (count > DOT_CAP) {
+    const angle = baseAngle + spreadAngle / 2 + 0.15
+    const { x: cx, y: cy } = ellipsePoint(r, angle)
+    elements.push(<text key="badge" x={cx} y={cy} fill={color}
+      fontSize={8} fontFamily="monospace" textAnchor="middle" dominantBaseline="middle">×{count}</text>)
+  }
+
+  if (delta !== 0) {
+    const annotAngle = baseAngle - spreadAngle / 2 - 0.2
+    const { x: ax, y: ay } = ellipsePoint(r + 10, annotAngle)
+    const annotColor = delta > 0 ? '#003399' : '#990000'
+    elements.push(<text key="annot" x={ax} y={ay} fill={annotColor}
+      fontSize={7} fontFamily="monospace" textAnchor="middle" dominantBaseline="middle"
+      style={{ fontWeight: 'bold' }}>
+      {delta > 0 ? `+${delta}` : `${delta}`}
+    </text>)
+  }
+
+  if (delta < 0) {
+    const { x: cx, y: cy } = ellipsePoint(r, baseAngle)
+    elements.push(<circle key="destroyed-ring" cx={cx} cy={cy} r={6}
+      fill="none" stroke="#990000" strokeWidth={1.5} strokeDasharray="2 2" />)
+  }
+
+  return elements
+}
+
 interface Props {
   gameState: GameState
   prevFactionStates: Record<string, FactionState> | null
@@ -91,11 +174,27 @@ export default function HoloOrbitalMap({
   gameState, prevFactionStates, humanAdversaryEstimates,
   selectedShell, selectedFaction, onShellHover, onFactionHover,
 }: Props) {
-  void prevFactionStates
-  void humanAdversaryEstimates
-  void onFactionHover
   const factions = useMemo(() => Object.entries(gameState.faction_states), [gameState.faction_states])
   const angleStep = (Math.PI * 2) / Math.max(factions.length, 1)
+
+  const [hoveredCluster, setHoveredCluster] = useState<{ fid: string; ringIdx: number } | null>(null)
+
+  function getNodeCount(fid: string, shell: 'leo_nodes' | 'meo_nodes' | 'geo_nodes' | 'cislunar_nodes') {
+    const humanCoalition = Object.entries(gameState.coalition_states).find(([, cs]) =>
+      cs.member_ids.includes(gameState.human_faction_id)
+    )?.[0]
+    const isAlly = humanCoalition
+      ? gameState.coalition_states[humanCoalition]?.member_ids.includes(fid)
+      : false
+    const isHuman = fid === gameState.human_faction_id
+
+    if (isHuman || isAlly) {
+      return { count: gameState.faction_states[fid]?.assets[shell] ?? 0, uncertain: false }
+    }
+    const est = humanAdversaryEstimates[fid]
+    if (!est) return { count: 0, uncertain: true }
+    return { count: est[shell] ?? 0, uncertain: true }
+  }
 
   return (
     <div className="panel" style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
@@ -228,7 +327,74 @@ export default function HoloOrbitalMap({
             )
           })}
 
-          {/* Faction nodes, kinetic animation — added in Task 7 */}
+          {/* Hover jammer/sensor lines */}
+          {hoveredCluster && (() => {
+            const { fid, ringIdx } = hoveredCluster
+            const fs = gameState.faction_states[fid]
+            if (!fs) return null
+            const fidx = factions.findIndex(([f]) => f === fid)
+            const angle = fidx * angleStep
+            const currentRing = RINGS[ringIdx]
+            const { x: fromX, y: fromY } = ellipsePoint(currentRing.r, angle)
+            const lines: React.ReactElement[] = []
+
+            if (fs.assets.sda_sensors > 0) {
+              for (let ri = ringIdx + 1; ri < RINGS.length; ri++) {
+                const { x: toX, y: toY } = ellipsePoint(RINGS[ri].r, angle)
+                lines.push(<line key={`sda-${ri}`} x1={fromX} y1={fromY} x2={toX} y2={toY}
+                  stroke="#00d4ff44" strokeWidth={1} strokeDasharray="3,3" />)
+              }
+            }
+            if (fs.assets.ew_jammers > 0) {
+              for (let ri = 0; ri < ringIdx; ri++) {
+                const { x: toX, y: toY } = ellipsePoint(RINGS[ri].r, angle)
+                lines.push(<line key={`ew-${ri}`} x1={fromX} y1={fromY} x2={toX} y2={toY}
+                  stroke="#f59e0b44" strokeWidth={1} strokeDasharray="3,3" />)
+              }
+            }
+            return <g>{lines}</g>
+          })()}
+
+          {/* Faction nodes */}
+          {RINGS.map(({ r, nodeKey }, ringIdx) =>
+            factions.map(([fid], fidx) => {
+              const { count, uncertain } = getNodeCount(fid, nodeKey)
+              if (count === 0 && !uncertain) return null
+              const color = factionColor(fid, gameState)
+              const nd = computeNodeDelta(fid, nodeKey, gameState, prevFactionStates)
+              const dimmed = selectedFaction !== null && selectedFaction !== fid
+              return (
+                <g key={`${r}-${fid}`} opacity={dimmed ? 0.25 : 1}
+                  onMouseEnter={() => {
+                    setHoveredCluster({ fid, ringIdx })
+                    onFactionHover?.(fid)
+                    onShellHover?.(RINGS[ringIdx].shell)
+                  }}
+                  onMouseLeave={() => {
+                    setHoveredCluster(null)
+                    onFactionHover?.(null)
+                    onShellHover?.(null)
+                  }}>
+                  {dotsOnEllipse(count, r, color, fidx, factions.length, nd, uncertain)}
+                </g>
+              )
+            })
+          )}
+
+          {/* Kinetic threat animation */}
+          {(gameState.human_snapshot?.incoming_threats ?? []).length > 0 && (
+            <g>
+              <ellipse cx={CX} cy={CY} rx={48} ry={48 * TILT_FACTOR}
+                fill="none" stroke="rgba(255,68,153,0.6)" strokeWidth={2} strokeDasharray="4 4" />
+              <circle r={3} fill="#ff4499">
+                <animateMotion dur="4s" repeatCount="indefinite"
+                  path={`M ${CX + 48},${CY} A 48,${(48 * TILT_FACTOR).toFixed(2)} 0 1 1 ${CX - 48},${CY} A 48,${(48 * TILT_FACTOR).toFixed(2)} 0 1 1 ${CX + 48},${CY}`}
+                />
+              </circle>
+              <text x={CX} y={65} fill="#ff4499" fontSize={8}
+                fontFamily="monospace" textAnchor="middle">⚠ KINETIC APPROACH</text>
+            </g>
+          )}
         </svg>
       </div>
     </div>
