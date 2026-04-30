@@ -21,18 +21,26 @@ class AfterActionReportGenerator:
         self._client = anthropic.Anthropic()
         self._model = model
 
-    async def generate(self, audit: AuditTrail, scenario_name: str) -> str:
+    async def generate(self, audit: AuditTrail, scenario_name: str, focus: str = "") -> tuple[str, dict]:
         game_log = await audit.get_full_game_log()
         log_text = json.dumps(game_log, indent=2)
+
+        user_content = f"SCENARIO: {scenario_name}\n\nGAME LOG:\n{log_text}"
+        if focus.strip():
+            user_content += f"\n\nFOCUS AREA: {focus.strip()}\n\nIn addition to the standard sections, give extra depth and attention to the focus area above."
 
         response = await asyncio.to_thread(
             self._client.messages.create,
             model=self._model,
             max_tokens=16000,
             system=AAR_SYSTEM,
-            messages=[{
-                "role": "user",
-                "content": f"SCENARIO: {scenario_name}\n\nGAME LOG:\n{log_text}"
-            }],
+            messages=[{"role": "user", "content": user_content}],
         )
-        return response.content[0].text
+        u = response.usage
+        usage = {
+            "input_tokens": u.input_tokens,
+            "output_tokens": u.output_tokens,
+            "cache_read_tokens": getattr(u, "cache_read_input_tokens", 0) or 0,
+            "cache_creation_tokens": getattr(u, "cache_creation_input_tokens", 0) or 0,
+        }
+        return response.content[0].text, usage

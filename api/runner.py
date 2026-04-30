@@ -331,9 +331,13 @@ async def advance(
         try:
             from agents.ai_commander import AICommanderAgent
             if isinstance(agent, AICommanderAgent):
-                prev = state.token_totals.get(next_fid, {"input_tokens": 0, "output_tokens": 0, "cache_read_tokens": 0, "cache_creation_tokens": 0})
                 t = agent.token_totals
+                prev = state.token_totals.get(next_fid, {"input_tokens": 0, "output_tokens": 0, "cache_read_tokens": 0, "cache_creation_tokens": 0})
                 state.token_totals[next_fid] = {k: prev[k] + t.get(k, 0) for k in prev}
+                if any(v > 0 for v in t.values()):
+                    await audit.initialize()
+                    await audit.write_token_usage(next_fid, "ai_commander", agent._model, t)
+                    await audit.close()
         except Exception:
             pass
 

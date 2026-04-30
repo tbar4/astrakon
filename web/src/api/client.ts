@@ -124,9 +124,29 @@ export async function deleteScenario(scenarioId: string): Promise<void> {
   if (!res.ok) throw new Error(`${res.status}: ${await res.text()}`)
 }
 
-export async function generateAar(sessionId: string): Promise<string> {
-  const body = await json<{ text: string }>(
-    await fetch(`${BASE}/game/${sessionId}/aar`, { method: 'POST' }),
+export interface AarResult {
+  text: string
+  cached: boolean
+  focus: string
+  usage?: { input_tokens: number; output_tokens: number; cache_read_tokens: number; cache_creation_tokens: number }
+}
+
+export interface SavedAar {
+  focus: string
+  text: string
+  created_at: string
+}
+
+export async function generateAar(sessionId: string, focus = '', force = false): Promise<AarResult> {
+  return json(
+    await fetch(`${BASE}/game/${sessionId}/aar`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ focus, force }),
+    }),
   )
-  return body.text
+}
+
+export async function listAars(sessionId: string): Promise<SavedAar[]> {
+  return json(await fetch(`${BASE}/game/${sessionId}/aars`))
 }

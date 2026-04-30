@@ -1,7 +1,9 @@
 // web/src/pages/SetupPage.tsx
 import React, { useState, useEffect } from 'react'
+import ReactMarkdown from 'react-markdown'
 import { useNavigate } from 'react-router-dom'
-import { listScenarios, listSessions, createGame, getState, advance, generateAar, getScenario, createScenario, updateScenario, deleteScenario } from '../api/client'
+import { listScenarios, listSessions, createGame, getState, advance, generateAar, listAars, getScenario, createScenario, updateScenario, deleteScenario } from '../api/client'
+import type { SavedAar } from '../api/client'
 import { useGameStore } from '../store/gameStore'
 import type { ScenarioSummary, SessionSummary, AgentConfig, ScenarioDetail, ScenarioFactionDetail } from '../types'
 
@@ -230,31 +232,171 @@ function SavedGamesTab() {
 }
 
 // ── After Action Reviews tab ──────────────────────────────────────────────────
+const AAR_INPUT: React.CSSProperties = {
+  width: '100%', background: '#020b18', border: '1px solid #00d4ff22',
+  color: '#94a3b8', fontFamily: 'Courier New', fontSize: 11, borderRadius: 2,
+  padding: '6px 8px', resize: 'vertical',
+}
+
+function SessionAarRow({ s }: { s: SessionSummary }) {
+  const [expanded, setExpanded] = useState(false)
+  const [savedAars, setSavedAars] = useState<SavedAar[]>([])
+  const [loadedAars, setLoadedAars] = useState(false)
+  const [selectedIdx, setSelectedIdx] = useState<number | null>(null)
+  const [focus, setFocus] = useState('')
+  const [generating, setGenerating] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  async function openPanel() {
+    setExpanded(true)
+    if (!loadedAars) {
+      try {
+        const aars = await listAars(s.session_id)
+        setSavedAars(aars)
+        if (aars.length > 0) setSelectedIdx(0)
+      } catch { /* ignore */ }
+      setLoadedAars(true)
+    }
+  }
+
+  async function handleGenerate(force = false) {
+    setGenerating(true)
+    setError(null)
+    try {
+      const result = await generateAar(s.session_id, focus, force)
+      const aars = await listAars(s.session_id)
+      setSavedAars(aars)
+      const idx = aars.findIndex(a => a.focus === result.focus)
+      setSelectedIdx(idx >= 0 ? idx : 0)
+    } catch (e) {
+      setError(String(e))
+    } finally {
+      setGenerating(false)
+    }
+  }
+
+  function downloadMd(text: string, focus: string) {
+    const suffix = focus ? `-${focus.slice(0, 30).toLowerCase().replace(/\s+/g, '-')}` : ''
+    const blob = new Blob([text], { type: 'text/markdown' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url; a.download = `aar-${(s.scenario_name ?? s.session_id).toLowerCase().replace(/\s+/g, '-')}${suffix}.md`
+    a.click(); URL.revokeObjectURL(url)
+  }
+
+  function openPdf(text: string) {
+    const win = window.open('', '_blank')
+    if (!win) return
+    const escaped = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    win.document.open()
+    win.document.write(`<html><head><title>AAR</title><style>body{font-family:Georgia,serif;max-width:800px;margin:40px auto;padding:0 20px;line-height:1.7}@media print{body{margin:20px}}</style></head><body><pre style="white-space:pre-wrap;font-family:Georgia,serif;font-size:14px">${escaped}</pre><script>window.onload=function(){window.print()}<\/script></body></html>`)
+    win.document.close()
+  }
+
+  const active = selectedIdx !== null ? savedAars[selectedIdx] : null
+
+  return (
+    <div className="panel">
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: 12, color: '#e2e8f0', marginBottom: 3 }}>{s.scenario_name}</div>
+          <div style={{ fontSize: 10, color: '#64748b', ...MONO }}>
+            {s.total_turns} TURNS · WINNER: {s.winner_coalition?.toUpperCase() ?? 'N/A'} · {new Date(s.updated_at).toLocaleDateString()}
+            {savedAars.length > 0 && <span style={{ color: '#334155' }}> · {savedAars.length} REPORT{savedAars.length !== 1 ? 'S' : ''} SAVED</span>}
+          </div>
+        </div>
+        <button className="btn-primary"
+          onClick={() => expanded ? setExpanded(false) : void openPanel()}
+          style={{ fontSize: 10, padding: '4px 14px', borderColor: '#f59e0b', color: '#f59e0b' }}>
+          {expanded ? 'COLLAPSE' : 'VIEW AARs'}
+        </button>
+      </div>
+
+      {expanded && (
+        <div style={{ marginTop: 14, borderTop: '1px solid #00d4ff11', paddingTop: 14 }}>
+          {error && <div style={{ color: '#ff4499', fontSize: 11, marginBottom: 10, ...MONO }}>{error}</div>}
+
+          {/* Saved report selector */}
+          {savedAars.length > 0 && (
+            <div style={{ marginBottom: 12 }}>
+              <div style={{ fontSize: 10, color: '#475569', ...MONO, marginBottom: 6, letterSpacing: 1 }}>SAVED REPORTS</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                {savedAars.map((a, i) => (
+                  <button key={i} onClick={() => setSelectedIdx(i)}
+                    style={{
+                      textAlign: 'left', background: selectedIdx === i ? '#00d4ff08' : 'none',
+                      border: `1px solid ${selectedIdx === i ? '#00d4ff22' : '#00d4ff0a'}`,
+                      borderRadius: 2, padding: '5px 8px', cursor: 'pointer',
+                      display: 'flex', justifyContent: 'space-between',
+                    }}>
+                    <span style={{ fontSize: 11, color: '#94a3b8', ...MONO }}>{a.focus ? `"${a.focus}"` : 'Standard report'}</span>
+                    <span style={{ fontSize: 10, color: '#334155', ...MONO }}>{new Date(a.created_at).toLocaleDateString()}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Focus input + generate */}
+          <div style={{ marginBottom: 10 }}>
+            <div style={{ fontSize: 10, color: '#475569', ...MONO, marginBottom: 4, letterSpacing: 1 }}>
+              FOCUS AREA <span style={{ color: '#334155' }}>(optional)</span>
+            </div>
+            <textarea rows={2} value={focus} onChange={(e) => setFocus(e.target.value)}
+              placeholder="e.g. coalition defection dynamics, Turn 4 kinetic exchange..."
+              style={AAR_INPUT} />
+          </div>
+          <button className="btn-primary" onClick={() => void handleGenerate(false)} disabled={generating}
+            style={{ width: '100%', marginBottom: 14, fontSize: 11 }}>
+            {generating ? '[ GENERATING — 30–60s... ]' : savedAars.some(a => a.focus === focus.trim()) ? '[ VIEW CACHED REPORT ]' : '[ GENERATE REPORT ]'}
+          </button>
+
+          {/* Active report */}
+          {active && (
+            <>
+              <div style={{ display: 'flex', gap: 8, marginBottom: 10, alignItems: 'center' }}>
+                <span style={{ fontSize: 10, color: '#475569', ...MONO, flex: 1 }}>
+                  {active.focus ? `FOCUS: "${active.focus}"` : 'STANDARD REPORT'}
+                </span>
+                <button className="btn-primary" onClick={() => void handleGenerate(true)} disabled={generating}
+                  style={{ fontSize: 10, padding: '2px 10px', borderColor: '#334155', color: '#64748b' }}>REGENERATE</button>
+                <button className="btn-primary" onClick={() => downloadMd(active.text, active.focus)}
+                  style={{ fontSize: 10, padding: '2px 10px', borderColor: '#00d4ff66', color: '#00d4ff' }}>↓ MD</button>
+                <button className="btn-primary" onClick={() => openPdf(active.text)}
+                  style={{ fontSize: 10, padding: '2px 10px', borderColor: '#f59e0b66', color: '#f59e0b' }}>↓ PDF</button>
+              </div>
+              <div style={{ fontSize: 13, lineHeight: 1.75, color: '#94a3b8', fontFamily: 'Georgia, serif' }}>
+                <ReactMarkdown
+                  components={{
+                    h1: ({ children }) => <h1 style={{ fontSize: 15, color: '#00d4ff', letterSpacing: 1, marginBottom: 10, marginTop: 20, fontFamily: 'Courier New' }}>{children}</h1>,
+                    h2: ({ children }) => <h2 style={{ fontSize: 12, color: '#00d4ff99', letterSpacing: 1, marginBottom: 6, marginTop: 16, fontFamily: 'Courier New' }}>{children}</h2>,
+                    h3: ({ children }) => <h3 style={{ fontSize: 11, color: '#64748b', marginBottom: 4, marginTop: 12, fontFamily: 'Courier New' }}>{children}</h3>,
+                    p: ({ children }) => <p style={{ marginBottom: 10, color: '#94a3b8' }}>{children}</p>,
+                    strong: ({ children }) => <strong style={{ color: '#e2e8f0' }}>{children}</strong>,
+                    ul: ({ children }) => <ul style={{ marginBottom: 10, paddingLeft: 18, color: '#94a3b8' }}>{children}</ul>,
+                    li: ({ children }) => <li style={{ marginBottom: 3 }}>{children}</li>,
+                    hr: () => <hr style={{ border: 'none', borderTop: '1px solid #00d4ff22', margin: '16px 0' }} />,
+                  }}
+                >
+                  {active.text}
+                </ReactMarkdown>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function AARTab() {
   const [sessions, setSessions] = useState<SessionSummary[]>([])
   const [loading, setLoading] = useState(true)
-  const [generating, setGenerating] = useState<string | null>(null)
-  const [aars, setAars] = useState<Record<string, string>>({})
-  const [expanded, setExpanded] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     listSessions().then(setSessions).catch(() => setError('Failed to load sessions')).finally(() => setLoading(false))
   }, [])
-
-  async function handleGenerateAar(sessionId: string) {
-    setGenerating(sessionId)
-    setExpanded(sessionId)
-    setError(null)
-    try {
-      const text = await generateAar(sessionId)
-      setAars((prev) => ({ ...prev, [sessionId]: text }))
-    } catch (e) {
-      setError(String(e))
-    } finally {
-      setGenerating(null)
-    }
-  }
 
   if (loading) return <div className="mono" style={{ color: '#334155', fontSize: 11 }}>LOADING SESSIONS...</div>
 
@@ -263,43 +405,13 @@ function AARTab() {
   return (
     <div style={{ width: '100%', maxWidth: 700 }}>
       {error && <div style={{ color: '#ff4499', fontSize: 11, marginBottom: 12, ...MONO }}>{error}</div>}
-
       {completed.length === 0 ? (
         <div className="panel" style={{ color: '#334155', fontSize: 11, ...MONO, textAlign: 'center', padding: 32 }}>
           NO COMPLETED SESSIONS YET
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          {completed.map((s) => (
-            <div key={s.session_id} className="panel">
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 12, color: '#e2e8f0', marginBottom: 3 }}>{s.scenario_name}</div>
-                  <div style={{ fontSize: 10, color: '#64748b', ...MONO }}>
-                    {s.total_turns} TURNS · WINNER: {s.winner_coalition?.toUpperCase() ?? 'N/A'} · {new Date(s.updated_at).toLocaleDateString()}
-                  </div>
-                </div>
-                <button className="btn-primary"
-                  onClick={() => expanded === s.session_id ? setExpanded(null) : (aars[s.session_id] ? setExpanded(s.session_id) : void handleGenerateAar(s.session_id))}
-                  disabled={generating === s.session_id}
-                  style={{ fontSize: 10, padding: '4px 14px', borderColor: '#f59e0b', color: '#f59e0b' }}>
-                  {generating === s.session_id ? 'GENERATING...' : expanded === s.session_id ? 'COLLAPSE' : aars[s.session_id] ? 'VIEW AAR' : 'GENERATE AAR'}
-                </button>
-              </div>
-
-              {expanded === s.session_id && (
-                <div style={{ marginTop: 14, borderTop: '1px solid #00d4ff11', paddingTop: 14 }}>
-                  {generating === s.session_id ? (
-                    <div className="mono" style={{ color: '#f59e0b', fontSize: 11 }}>GENERATING AFTER ACTION REVIEW — THIS MAY TAKE 30–60 SECONDS...</div>
-                  ) : aars[s.session_id] ? (
-                    <pre style={{ fontSize: 11, color: '#94a3b8', whiteSpace: 'pre-wrap', fontFamily: 'Courier New', lineHeight: 1.6, margin: 0 }}>
-                      {aars[s.session_id]}
-                    </pre>
-                  ) : null}
-                </div>
-              )}
-            </div>
-          ))}
+          {completed.map((s) => <SessionAarRow key={s.session_id} s={s} />)}
         </div>
       )}
     </div>

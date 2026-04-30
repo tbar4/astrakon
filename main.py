@@ -234,7 +234,7 @@ async def main():
             from datetime import datetime
             console.print("[dim]Generating AAR via Claude Opus...[/dim]")
             aar_gen = AfterActionReportGenerator()
-            aar_text = await aar_gen.generate(audit=audit, scenario_name=scenario.name)
+            aar_text, _aar_usage = await aar_gen.generate(audit=audit, scenario_name=scenario.name)
             winner_slug = result.winner_coalition.replace(" ", "_").lower() if result.winner_coalition else "draw"
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             scenario_slug = scenario.name.replace(" ", "_").lower()

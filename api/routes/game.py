@@ -1,11 +1,15 @@
 # api/routes/game.py
+import asyncio
 import json as _json
 from typing import Optional
 import aiosqlite
 from fastapi import APIRouter, HTTPException
-from api.models import CreateGameRequest, DecideRequest, GameStateResponse
+from api.models import AarRequest, CreateGameRequest, DecideRequest, GameStateResponse
 from api import runner
 from api.session import load_session, _DEFAULT_DB
+
+# Only one AAR generation runs at a time to avoid exceeding the API rate limit.
+_aar_semaphore = asyncio.Semaphore(1)
 
 router = APIRouter()
 
@@ -122,6 +126,17 @@ async def recommend(session_id: str, phase: str):
         snapshot = GameStateSnapshot.model_validate(state.human_snapshot)
         advisor.receive_state(snapshot)
         rec = await advisor.get_recommendation(Phase(phase))
+
+        t = advisor.token_totals
+        if any(v > 0 for v in t.values()):
+            from output.audit import AuditTrail
+            audit = AuditTrail(f"output/game_audit_{state.session_id[:8]}.db")
+            try:
+                await audit.initialize()
+                await audit.write_token_usage(state.human_faction_id, "advisor", advisor._model, t)
+            finally:
+                await audit.close()
+
         return {"recommendation": rec.model_dump() if rec else None}
     return {"recommendation": None}
 
@@ -154,19 +169,47 @@ async def get_history(session_id: str):
         await audit.close()
 
 
+@router.get("/game/{session_id}/aars")
+async def list_aars(session_id: str):
+    from api.session import list_aars as _list_aars
+    return await _list_aars(session_id)
+
+
 @router.post("/game/{session_id}/aar")
-async def generate_aar(session_id: str):
+async def generate_aar(session_id: str, req: AarRequest = AarRequest()):
     state = await load_session(session_id)
     if state is None:
         raise HTTPException(status_code=404, detail="Session not found")
+
+    focus: str = req.focus
+    force: bool = req.force
+
+    from api.session import load_aar, save_aar
+    if not force:
+        cached = await load_aar(session_id, focus)
+        if cached:
+            return {"text": cached, "cached": True, "focus": focus}
+
     from output.aar import AfterActionReportGenerator
     from output.audit import AuditTrail
+    import anthropic as _anthropic
+
     gen = AfterActionReportGenerator()
     audit_path = f"output/game_audit_{state.session_id[:8]}.db"
     audit = AuditTrail(audit_path)
     await audit.initialize()
     try:
-        text = await gen.generate(audit=audit, scenario_name=state.scenario_name)
+        async with _aar_semaphore:
+            text, aar_usage = await gen.generate(audit=audit, scenario_name=state.scenario_name, focus=focus)
+    except _anthropic.RateLimitError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="API rate limit reached — another report is already generating. Wait a minute and try again.",
+        ) from exc
+    except _anthropic.APIError as exc:
+        raise HTTPException(status_code=502, detail=f"AI API error: {exc}") from exc
     finally:
         await audit.close()
-    return {"text": text}
+
+    await save_aar(session_id, focus, text)
+    return {"text": text, "cached": False, "focus": focus, "usage": aar_usage}

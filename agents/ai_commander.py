@@ -118,8 +118,9 @@ def _parse_snapshot_to_user_message(snapshot: GameStateSnapshot, phase: Phase) -
     ]
     for fid, est in snapshot.adversary_estimates.items():
         lines.append(
-            f"  {fid}: LEO={est.leo_nodes} MEO={est.meo_nodes} GEO={est.geo_nodes} "
-            f"Cislunar={est.cislunar_nodes} ASAT-K={est.asat_kinetic}"
+            f"  {fid}: LEO={est.get('leo_nodes', 0)} MEO={est.get('meo_nodes', 0)} "
+            f"GEO={est.get('geo_nodes', 0)} Cislunar={est.get('cislunar_nodes', 0)} "
+            f"ASAT-K={est.get('asat_kinetic', 0)}"
         )
     if snapshot.incoming_threats:
         lines.append("")
@@ -217,8 +218,8 @@ class AICommanderAgent(AgentInterface):
         u = response.usage
         self._token_totals["input_tokens"] += u.input_tokens
         self._token_totals["output_tokens"] += u.output_tokens
-        self._token_totals["cache_read_tokens"] += getattr(u, "cache_read_input_tokens", 0)
-        self._token_totals["cache_creation_tokens"] += getattr(u, "cache_creation_input_tokens", 0)
+        self._token_totals["cache_read_tokens"] += getattr(u, "cache_read_input_tokens", 0) or 0
+        self._token_totals["cache_creation_tokens"] += getattr(u, "cache_creation_input_tokens", 0) or 0
         return response
 
     async def submit_decision(self, phase: Phase) -> Decision:
