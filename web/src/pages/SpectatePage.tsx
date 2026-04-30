@@ -5,6 +5,7 @@ import { advance } from '../api/client'
 import type { GameState } from '../types'
 import type { TurnSnapshot } from '../store/gameStore'
 import MapTabContainer from '../components/MapTabContainer'
+import { LOADING_QUOTES } from '../data/loadingQuotes'
 
 const SPEEDS = [
   { label: '0.5×', ms: 6000 },
@@ -64,9 +65,21 @@ export default function SpectatePage() {
   }, [sessionId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!gameState) {
+    const q = LOADING_QUOTES[Math.floor(Math.random() * LOADING_QUOTES.length)]
     return (
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh' }}>
-        <div className="mono" style={{ color: '#00d4ff', fontSize: 11 }}>INITIALIZING SIMULATION...</div>
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100vh', gap: 20 }}>
+        <div className="mono" style={{ color: '#00d4ff', fontSize: 11, letterSpacing: 4 }}>INITIALIZING SIMULATION...</div>
+        <div style={{ width: 200, height: 2, background: 'rgba(0,212,255,0.1)', overflow: 'hidden', borderRadius: 1 }}>
+          <div style={{ height: '100%', width: '40%', background: '#00d4ff', boxShadow: '0 0 8px #00d4ff', animation: 'scan 1.5s linear infinite' }} />
+        </div>
+        <div style={{ maxWidth: 480, textAlign: 'center', marginTop: 12 }}>
+          <div style={{ fontSize: 12, color: '#64748b', fontStyle: 'italic', lineHeight: 1.7, marginBottom: 10, fontFamily: 'Georgia, serif' }}>
+            "{q.text}"
+          </div>
+          <div className="mono" style={{ fontSize: 9, color: '#334155', letterSpacing: 1 }}>— {q.author}</div>
+          <div className="mono" style={{ fontSize: 9, color: '#1e3a4a', letterSpacing: 1, marginTop: 2 }}>{q.source}</div>
+        </div>
+        <style>{`@keyframes scan { 0% { transform: translateX(-100%); } 100% { transform: translateX(600%); } }`}</style>
       </div>
     )
   }

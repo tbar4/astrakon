@@ -7,9 +7,9 @@ import type { SavedAar, AarResult } from '../api/client'
 import { useGameStore } from '../store/gameStore'
 import type { ScenarioSummary, SessionSummary, AgentConfig, ScenarioDetail, ScenarioFactionDetail } from '../types'
 
-type Tab = 'NEW GAME' | 'SAVED GAMES' | 'AFTER ACTION REVIEWS' | 'SCENARIO EDITOR'
+type Tab = 'NEW GAME' | 'SAVED GAMES' | 'AFTER ACTION REVIEWS' | 'SCENARIO EDITOR' | 'HOW TO PLAY'
 
-const TABS: Tab[] = ['NEW GAME', 'SAVED GAMES', 'AFTER ACTION REVIEWS', 'SCENARIO EDITOR']
+const TABS: Tab[] = ['NEW GAME', 'SAVED GAMES', 'AFTER ACTION REVIEWS', 'SCENARIO EDITOR', 'HOW TO PLAY']
 
 const MONO: React.CSSProperties = { fontFamily: 'Courier New' }
 
@@ -113,7 +113,7 @@ function NewGameTab() {
   const selected = scenarios.find((s) => s.id === selectedId)
 
   return (
-    <div className="panel" style={{ width: '100%', maxWidth: 600 }}>
+    <div className="panel" style={{ width: '100%' }}>
       {error && (
         <div style={{ color: '#ff4499', fontSize: 11, marginBottom: 16, ...MONO }}>{error}</div>
       )}
@@ -736,6 +736,222 @@ function ScenarioEditorTab() {
   )
 }
 
+// ── How To Play tab ───────────────────────────────────────────────────────────
+const SECTION: React.CSSProperties = { marginBottom: 20 }
+const RULE_LABEL: React.CSSProperties = { fontSize: 10, color: '#00d4ff99', letterSpacing: 2, ...MONO, marginBottom: 6 }
+const BODY: React.CSSProperties = { fontSize: 11, color: '#94a3b8', lineHeight: 1.75 }
+const ROW: React.CSSProperties = { display: 'flex', gap: 10, padding: '5px 0', borderBottom: '1px solid #00d4ff08', alignItems: 'flex-start' }
+const KEY: React.CSSProperties = { fontSize: 10, color: '#00d4ff', ...MONO, minWidth: 130, flexShrink: 0, paddingTop: 1 }
+const VAL: React.CSSProperties = { fontSize: 11, color: '#94a3b8', lineHeight: 1.65 }
+
+function HowToPlayTab() {
+  return (
+    <div style={{ width: '100%', maxWidth: 700, display: 'flex', flexDirection: 'column', gap: 12 }}>
+
+      {/* Overview */}
+      <div className="panel">
+        <div className="panel-title">OVERVIEW</div>
+        <p style={BODY}>
+          Astrakon is a turn-based orbital strategy simulation. Two coalitions of spacefaring factions compete
+          to achieve <span style={{ color: '#00d4ff' }}>orbital dominance</span> — measured as the fraction of
+          total deployed satellite nodes controlled by a coalition. Exceed the victory threshold before your
+          opponent and the game ends. If neither side reaches the threshold, the coalition with higher
+          dominance when turns expire wins.
+        </p>
+        <p style={{ ...BODY, marginTop: 8 }}>
+          Each faction has its own budget, archetype, and starting assets. Factions within a coalition share
+          intelligence and contribute to a common dominance score, but compete independently in operations.
+        </p>
+      </div>
+
+      {/* Orbital Shells */}
+      <div className="panel">
+        <div className="panel-title">ORBITAL SHELLS</div>
+        <p style={{ ...BODY, marginBottom: 10 }}>
+          The operational theater is divided into four orbital shells, each with distinct strategic value and
+          delta-V cost to reach.
+        </p>
+        {[
+          ['LEO  ·  9.4 km/s', 'Low Earth Orbit. Cheap to access, easy to contest. Dense with ISR and SDA nodes. High debris risk — a Kessler event here blocks the shell entirely.'],
+          ['MEO  ·  +1.5 km/s', 'Medium Earth Orbit. The navigation and GNSS hub. Moderate maneuver cost. Less contested but strategically critical for precision operations.'],
+          ['GEO  ·  +1.8 km/s', 'Geostationary Orbit. Scarce slots with permanent line-of-sight. Persistent comms and early-warning assets sit here. High delta-V to reach and vacate.'],
+          ['CIS  ·  +0.7 km/s', 'Cislunar space including L1, L2, L4, L5, and lunar orbit. Frontier territory — dynamic access windows and extreme range from Earth. Controls future logistics chokepoints.'],
+        ].map(([label, desc]) => (
+          <div key={label} style={ROW}>
+            <span style={KEY}>{label}</span>
+            <span style={VAL}>{desc}</span>
+          </div>
+        ))}
+        <p style={{ ...BODY, marginTop: 10, color: '#64748b' }}>
+          Access windows open and close each turn. A shell marked CLOSED cannot receive new assets that turn.
+          Kessler debris (debris index ≥ 0.80) renders a shell impassable — existing nodes are destroyed.
+        </p>
+      </div>
+
+      {/* Delta-V Tab */}
+      <div className="panel">
+        <div className="panel-title">THE DELTA-V TAB</div>
+        <p style={{ ...BODY, marginBottom: 10 }}>
+          The game map has two views. The <span style={{ color: '#00d4ff' }}>ORBITAL</span> tab shows where assets are
+          positioned spatially. The <span style={{ color: '#00d4ff' }}>DELTA-V</span> tab answers a different
+          question: <em style={{ color: '#e2e8f0' }}>how expensive is it to project force between shells?</em>
+        </p>
+        <p style={{ ...BODY, marginBottom: 14 }}>
+          The graph arranges shells as a vertical cost ladder — Earth at the bottom, cislunar at the top.
+          Each edge is labeled with the incremental delta-V required to maneuver between adjacent shells.
+          Edge color encodes cost tier:
+        </p>
+        {[
+          ['Green  ·  ≤ 1.0 km/s', 'Low cost. Rapid redeployment or reinforcement is viable.'],
+          ['Yellow  ·  1.0–2.0 km/s', 'Moderate cost. Maneuver is possible but consumes meaningful budget.'],
+          ['Red  ·  > 2.0 km/s', 'High cost. Sustained presence here requires upfront investment — you cannot cheaply surge or retreat.'],
+        ].map(([label, desc]) => (
+          <div key={label} style={ROW}>
+            <span style={KEY}>{label}</span>
+            <span style={VAL}>{desc}</span>
+          </div>
+        ))}
+
+        <div style={{ ...RULE_LABEL, marginTop: 16 }}>COST STRUCTURE AND WHAT IT MEANS</div>
+        {[
+          ['LEO  →  MEO  (1.5 km/s)', 'Affordable but not free. Factions that flood LEO early can pivot upward, but MEO competition requires real budget commitment. LEO is the easiest shell to contest — and the easiest to lose.'],
+          ['MEO  →  GEO  (1.8 km/s)', 'The most expensive single hop in the theater. GEO nodes are hard to reach and hard to replace. A faction that establishes GEO presence early gains a structural advantage: adversaries must pay 1.8 km/s to match them, while the GEO holder pays nothing to hold.'],
+          ['GEO  →  CIS  (0.7 km/s)', 'The cheapest hop. Cislunar is surprisingly accessible if you already hold GEO — the gate to the frontier is cheap once you\'re in geostationary. But reaching CIS from LEO requires passing through the expensive MEO→GEO crossing first.'],
+        ].map(([label, desc]) => (
+          <div key={label} style={ROW}>
+            <span style={KEY}>{label}</span>
+            <span style={VAL}>{desc}</span>
+          </div>
+        ))}
+
+        <div style={{ ...RULE_LABEL, marginTop: 16 }}>READING THE GRAPH STRATEGICALLY</div>
+        <p style={BODY}>
+          Each node displays a <span style={{ color: '#00d4ff' }}>faction presence bar</span> — a stacked color
+          strip showing each coalition's share of nodes in that shell. Nodes pulse when their shell's access
+          window is open. Kessler-blocked shells render red with a BLOCKED indicator.
+        </p>
+        <p style={{ ...BODY, marginTop: 8 }}>
+          Clicking a node highlights it and dims all others, syncing selection with the ORBITAL tab — both
+          views show the same selection state, so you can pivot between spatial context and cost analysis
+          without losing your focus.
+        </p>
+        <p style={{ ...BODY, marginTop: 8 }}>
+          Use the Delta-V tab to identify leverage points: a coalition that controls the MEO→GEO crossing
+          makes it expensive for adversaries to reach the two highest-value shells. A dominant CIS presence
+          built on a weak GEO foundation is brittle — your opponent only needs to contest GEO to cut off
+          your logistics corridor.
+        </p>
+      </div>
+
+      {/* Setup */}
+      <div className="panel" style={SECTION}>
+        <div className="panel-title">SETUP</div>
+        <div style={RULE_LABEL}>SCENARIO</div>
+        <p style={{ ...BODY, marginBottom: 10 }}>
+          Select a pre-built scenario or one you have created in the Scenario Editor. Each scenario defines
+          the factions, their starting assets, the number of turns, and the orbital dominance threshold needed
+          to win.
+        </p>
+        <div style={RULE_LABEL}>CONFIGURE FACTIONS</div>
+        {[
+          ['Human (web)', 'You control this faction\'s decisions each turn through the game interface.'],
+          ['AI — Rule-based', 'A scripted agent follows archetype-specific heuristics. Fast and predictable. Good for filling out a coalition or running AI-vs-AI simulations.'],
+          ['AI — Commander', 'A language-model agent reasons through the situation and generates orders. Slower per turn but exhibits more adaptive, emergent behavior.'],
+        ].map(([label, desc]) => (
+          <div key={label} style={ROW}>
+            <span style={KEY}>{label}</span>
+            <span style={VAL}>{desc}</span>
+          </div>
+        ))}
+        <div style={{ ...ROW, marginTop: 10 }}>
+          <span style={KEY}>Advisor</span>
+          <span style={VAL}>
+            Available for Human factions. An AI Commander analyzes the current game state and suggests
+            investment and operational priorities before you submit orders. Advisory text appears in the
+            game interface. It does not submit orders on your behalf.
+          </span>
+        </div>
+        <p style={{ ...BODY, marginTop: 10, color: '#64748b' }}>
+          At least one faction must be set to Human to start a game. Use <span style={{ color: '#f59e0b' }}>WATCH AI vs AI</span> to
+          run a fully automated simulation as a spectator.
+        </p>
+      </div>
+
+      {/* Turn Phases */}
+      <div className="panel">
+        <div className="panel-title">TURN PHASES</div>
+        <p style={{ ...BODY, marginBottom: 10 }}>Each turn resolves in three sequential phases:</p>
+        {[
+          ['1 · INVEST', 'Allocate your budget across asset categories. Nodes extend your presence in a shell. EW jammers suppress enemy sensors. SDA sensors reveal adversary estimates. ASAT weapons enable strike options. Launch capacity sets the maximum new assets you can field next turn.'],
+          ['2 · OPERATIONS', 'Issue operational orders — deploy assets to shells, activate jammers, or declare ASAT strikes. Kinetic strikes against a shell are announced and resolved next turn; deniable operations are covert. Orders are submitted simultaneously across all factions.'],
+          ['3 · RESPONSE', 'Respond to declared threats before they resolve. You may attempt intercepts, reposition assets, or accept the incoming strike. Coalition partners\' intelligence is shared — adversary node estimates update based on SDA coverage.'],
+        ].map(([label, desc]) => (
+          <div key={label} style={ROW}>
+            <span style={{ ...KEY, minWidth: 130 }}>{label}</span>
+            <span style={VAL}>{desc}</span>
+          </div>
+        ))}
+      </div>
+
+      {/* Assets */}
+      <div className="panel">
+        <div className="panel-title">ASSETS</div>
+        {[
+          ['Nodes (LEO/MEO/GEO/CIS)', 'Satellite nodes deployed in a shell. Node count is the primary input to dominance calculation. Nodes can be destroyed by ASAT strikes or Kessler events.'],
+          ['ASAT — Kinetic', 'Declared strike capability. Target shell is announced on declaration; strike resolves the following turn. Defender has one turn to respond. Generates debris, raising Kessler risk.'],
+          ['ASAT — Deniable', 'Covert strike capability. No prior announcement. Resolves immediately with no defender response window. Lower debris generation.'],
+          ['EW Jammers', 'Electronic warfare assets that degrade enemy SDA sensors in the same or lower shells. Jammed sensors report no adversary node data.'],
+          ['SDA Sensors', 'Space Domain Awareness assets. Each sensor in a shell reveals adversary node counts in that shell and adjacent shells. Without SDA coverage, you see only estimates.'],
+          ['Launch Capacity', 'Sets the ceiling on how many new assets can be fielded per turn across all shells. Higher capacity enables faster build-up and recovery after losses.'],
+        ].map(([label, desc]) => (
+          <div key={label} style={ROW}>
+            <span style={KEY}>{label}</span>
+            <span style={VAL}>{desc}</span>
+          </div>
+        ))}
+      </div>
+
+      {/* Dominance & Victory */}
+      <div className="panel">
+        <div className="panel-title">DOMINANCE {'&'} VICTORY</div>
+        <p style={BODY}>
+          Orbital dominance is the share of all deployed nodes controlled by a coalition, weighted by shell.
+          The dominance strip at the bottom of the game map shows each coalition's current score and
+          turn-over-turn delta.
+        </p>
+        <p style={{ ...BODY, marginTop: 8 }}>
+          A coalition wins immediately when its dominance crosses the scenario's victory threshold (default 60%).
+          If neither coalition reaches the threshold by the final turn, the higher score wins. The
+          dominance timeline in the OPS tab shows the full trajectory across all turns.
+        </p>
+      </div>
+
+      {/* Escalation */}
+      <div className="panel">
+        <div className="panel-title">ESCALATION LADDER</div>
+        <p style={{ ...BODY, marginBottom: 10 }}>
+          Crisis events and ASAT strikes raise the escalation rung. Higher rungs unlock more destructive
+          options but risk triggering irreversible outcomes.
+        </p>
+        {[
+          ['RUNG 0', 'Peacetime competition. Covert operations only. No declared strikes authorized.'],
+          ['RUNG 1', 'Signaling. Deniable operations ongoing. Kinetic options are on the table but not yet exercised.'],
+          ['RUNG 2', 'Reversible escalation. First declared ASAT strikes. Debris accumulation begins. De-escalation still possible.'],
+          ['RUNG 3', 'Active hostilities. Multiple kinetic exchanges. Kessler risk elevated. Coalition cohesion begins to strain.'],
+          ['RUNG 4', 'Full orbital conflict. Sustained strikes across shells. Kessler events likely. Faction defection risk increases.'],
+          ['RUNG 5', 'Uncontrolled escalation. Runaway debris, multi-shell Kessler cascade possible. Game end may be forced.'],
+        ].map(([label, desc]) => (
+          <div key={label} style={ROW}>
+            <span style={{ ...KEY, minWidth: 80, color: label === 'RUNG 0' ? '#00ff88' : label === 'RUNG 1' ? '#00d4ff' : label === 'RUNG 2' ? '#f59e0b' : label === 'RUNG 3' ? '#f97316' : '#ef4444' }}>{label}</span>
+            <span style={VAL}>{desc}</span>
+          </div>
+        ))}
+      </div>
+
+    </div>
+  )
+}
+
 // ── Root ──────────────────────────────────────────────────────────────────────
 export default function SetupPage() {
   const [tab, setTab] = useState<Tab>('NEW GAME')
@@ -753,6 +969,7 @@ export default function SetupPage() {
         {tab === 'SAVED GAMES' && <SavedGamesTab />}
         {tab === 'AFTER ACTION REVIEWS' && <AARTab />}
         {tab === 'SCENARIO EDITOR' && <ScenarioEditorTab />}
+        {tab === 'HOW TO PLAY' && <HowToPlayTab />}
       </div>
     </div>
   )
