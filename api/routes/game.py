@@ -164,6 +164,7 @@ async def generate_aar(session_id: str):
     gen = AfterActionReportGenerator()
     audit_path = f"output/game_audit_{state.session_id[:8]}.db"
     audit = AuditTrail(audit_path)
+    await audit.initialize()
     try:
         text = await gen.generate(audit=audit, scenario_name=state.scenario_name)
     finally:
