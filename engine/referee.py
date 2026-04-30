@@ -84,9 +84,10 @@ class GameReferee:
         prev_turn_ops: list,
         pending_kinetic_approaches: list,
         current_turn: int,
+        initial_assets: dict | None = None,
     ) -> None:
         """Populate internal state from serialized game state (used by web runner)."""
-        from engine.state import FactionState, CoalitionState
+        from engine.state import FactionState, CoalitionState, FactionAssets
         self.faction_states = {
             fid: FactionState.model_validate(fs) if isinstance(fs, dict) else fs
             for fid, fs in faction_states.items()
@@ -104,6 +105,11 @@ class GameReferee:
         self._prev_turn_ops = list(prev_turn_ops)
         self._pending_kinetic_approaches = list(pending_kinetic_approaches)
         self._current_turn = current_turn
+        if initial_assets:
+            self._initial_assets = {
+                fid: FactionAssets.model_validate(a) if isinstance(a, dict) else a
+                for fid, a in initial_assets.items()
+            }
 
     def dump_mutable_state(self) -> dict:
         """Return serializable dict of all mutable game state."""

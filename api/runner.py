@@ -2,7 +2,6 @@
 import uuid
 from pathlib import Path
 from typing import Optional
-from datetime import datetime
 
 from engine.state import Phase, Decision, FactionState, CoalitionState
 from engine.simulation import SimulationEngine
@@ -48,11 +47,11 @@ def _make_agents(scenario: Scenario, agent_config: list[dict]) -> dict[str, Agen
     return agents
 
 
-def _make_referee(scenario: Scenario, agents: dict, state: GameState) -> tuple:
+def _make_referee(scenario: Scenario, agents: dict, state: GameState, audit: "AuditTrail | None" = None) -> tuple:
     """Create a GameReferee pre-loaded with serialized game state."""
-    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-    Path("output").mkdir(exist_ok=True)
-    audit = AuditTrail(f"output/game_audit_{state.session_id[:8]}_{ts}.db")
+    if audit is None:
+        Path("output").mkdir(exist_ok=True)
+        audit = AuditTrail(f"output/game_audit_{state.session_id[:8]}.db")
     referee = GameReferee(scenario=scenario, agents=agents, audit=audit, header=NullGameHeader())
     referee.load_mutable_state(
         faction_states=state.faction_states,
@@ -66,6 +65,7 @@ def _make_referee(scenario: Scenario, agents: dict, state: GameState) -> tuple:
         prev_turn_ops=state.prev_turn_ops,
         pending_kinetic_approaches=state.pending_kinetic_approaches,
         current_turn=state.turn,
+        initial_assets=state.initial_assets,
     )
     return referee, audit
 
@@ -153,6 +153,7 @@ async def create_game(
         agent_config=agent_config,
         victory_threshold=scenario.victory.coalition_orbital_dominance,
         coalition_colors=coalition_colors,
+        initial_assets={f.faction_id: f.starting_assets.model_dump() for f in scenario.factions},
     )
     await save_session(state, db_path=db_path)
     return state
@@ -170,6 +171,16 @@ async def advance(
     state.error = None
     scenario = _load_scenario(state.scenario_id)
     sim = SimulationEngine()
+
+    # Handle inter-turn: frontend called /advance after viewing summary
+    if state.awaiting_next_turn:
+        state.turn += 1
+        state.turn_log = []
+        state.events = []
+        state.phase_decisions = {}
+        state.awaiting_next_turn = False
+        _replenish_budgets(state, scenario)
+        await save_session(state, db_path=db_path)
 
     # Start turn 1 if new game
     if state.turn == 0:
@@ -258,6 +269,7 @@ async def advance(
                     else:
                         # Advance to next turn — but return summary first
                         # Frontend shows TurnSummary then calls /advance to start next turn
+                        state.awaiting_next_turn = True
                         await save_session(state, db_path=db_path)
                         break  # return state to frontend for summary display
 
@@ -297,7 +309,8 @@ async def advance(
         try:
             dec = await agent.submit_decision(state.current_phase)
             state.phase_decisions[next_fid] = dec.model_dump_json()
-        except Exception:
+        except Exception as e:
+            state.error = f"AI agent error: {e}"
             fallback = MahanianAgent()
             fallback.initialize(next(f for f in scenario.factions if f.faction_id == next_fid))
             fallback.receive_state(referee._build_snapshot(next_fid, state.current_phase, available))

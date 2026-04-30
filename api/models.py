@@ -32,6 +32,8 @@ class GameState(BaseModel):
     error: Optional[str] = None
     victory_threshold: float = 0.65
     coalition_colors: dict[str, str] = {}
+    awaiting_next_turn: bool = False
+    initial_assets: dict[str, dict] = {}  # faction_id → FactionAssets dict (for JFE computation)
 
 
 class ScenarioFactionSummary(BaseModel):
