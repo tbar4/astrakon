@@ -1,6 +1,7 @@
 // web/src/components/DominanceRail.tsx
 import type { GameState } from '../types'
 import type { TurnSnapshot } from '../store/gameStore'
+import EscalationLadder from './EscalationLadder'
 
 interface Props {
   gameState: GameState
@@ -105,6 +106,39 @@ export default function DominanceRail({ gameState, coalitionDominance, turnHisto
               <div style={{ color: '#64748b' }}>{ev.description}</div>
             </div>
           ))}
+        </div>
+      )}
+
+      <EscalationLadder rung={gameState.escalation_rung ?? 0} />
+
+      {gameState.access_windows && (
+        <div style={{ marginTop: 10 }}>
+          <div style={{ fontFamily: 'Courier New', fontSize: 9, color: '#334155', letterSpacing: 2, marginBottom: 4 }}>
+            ACCESS WINDOWS
+          </div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            {(['leo', 'meo', 'geo', 'cislunar'] as const).map((shell) => {
+              const open = gameState.access_windows[shell]
+              const debris = gameState.debris_fields?.[shell] ?? 0
+              const color = debris >= 0.8 ? '#ef4444' : open ? '#00ff88' : '#334155'
+              const label = debris >= 0.8 ? 'KESSLER' : open ? 'OPEN' : 'CLOSED'
+              return (
+                <div key={shell} style={{ textAlign: 'center' }}>
+                  <div style={{ fontFamily: 'Courier New', fontSize: 8, color, letterSpacing: 1 }}>
+                    {shell.toUpperCase()}
+                  </div>
+                  <div style={{ fontFamily: 'Courier New', fontSize: 7, color, marginTop: 1 }}>
+                    {label}
+                  </div>
+                  {debris > 0 && (
+                    <div style={{ fontFamily: 'Courier New', fontSize: 7, color: '#ef4444', marginTop: 1 }}>
+                      {Math.round(debris * 100)}%
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
         </div>
       )}
     </div>
