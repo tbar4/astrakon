@@ -31,6 +31,8 @@ export default function InvestPanel({ budget, onSubmit, disabled }: Props) {
 
   const total = Object.values(allocs).reduce((a, b) => a + b, 0)
   const remaining = 1.0 - total
+  const usedPts = Math.round(total * budget)
+  const remainingPts = budget - usedPts
   const isValid = total <= 1.001 && rationale.trim().length > 0
 
   function setAlloc(key: CategoryKey, pct: number) {
@@ -46,8 +48,13 @@ export default function InvestPanel({ budget, onSubmit, disabled }: Props) {
   return (
     <div>
       <div className="panel-title">◆ INVEST PHASE — BUDGET: {budget} PTS</div>
-      <div className="mono" style={{ fontSize: 10, color: remaining < 0 ? '#ff4499' : '#64748b', marginBottom: 12 }}>
-        ALLOCATED: {(total * 100).toFixed(0)}% · REMAINING: {(remaining * 100).toFixed(0)}%
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
+        <span className="mono" style={{ fontSize: 10, color: '#64748b' }}>
+          USED: <span style={{ color: total > 0 ? '#00d4ff' : '#334155' }}>{usedPts} pts ({(total * 100).toFixed(0)}%)</span>
+        </span>
+        <span className="mono" style={{ fontSize: 10 }}>
+          LEFT: <span style={{ color: remaining < 0 ? '#ff4499' : remaining < 0.1 ? '#f59e0b' : '#00ff88' }}>{remainingPts} pts ({(remaining * 100).toFixed(0)}%)</span>
+        </span>
       </div>
 
       {CATEGORIES.map(({ key, label }) => (
@@ -64,11 +71,16 @@ export default function InvestPanel({ budget, onSubmit, disabled }: Props) {
             disabled={disabled}
           />
           <div style={{ fontSize: 10, color: '#334155' }}>
-            ≈ {Math.floor(budget * allocs[key])} pts →{' '}
-            {key === 'constellation' && `${Math.floor(budget * allocs[key] / 5)} LEO nodes`}
-            {key === 'meo_deployment' && `${Math.floor(budget * allocs[key] / 12)} MEO nodes`}
-            {key === 'geo_deployment' && `${Math.floor(budget * allocs[key] / 25)} GEO nodes`}
-            {key === 'cislunar_deployment' && `${Math.floor(budget * allocs[key] / 40)} cislunar nodes`}
+            {(() => {
+              const pts = Math.floor(budget * allocs[key])
+              if (pts === 0) return null
+              const nodeHint =
+                key === 'constellation' ? `→ ${Math.floor(pts / 5)} LEO nodes` :
+                key === 'meo_deployment' ? `→ ${Math.floor(pts / 12)} MEO nodes` :
+                key === 'geo_deployment' ? `→ ${Math.floor(pts / 25)} GEO nodes` :
+                key === 'cislunar_deployment' ? `→ ${Math.floor(pts / 40)} cislunar nodes` : ''
+              return `≈ ${pts} pts ${nodeHint}`
+            })()}
           </div>
         </div>
       ))}
