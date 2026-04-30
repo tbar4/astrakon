@@ -49,6 +49,20 @@ def display_situation(snapshot: GameStateSnapshot) -> None:
         f"Joint Force Effectiveness: [{jfe_color}]{jfe:.0%}[/{jfe_color}]"
     )
 
+    # Deferred returns (R&D / Education)
+    if fs.deferred_returns:
+        ret_table = Table(
+            title="Pending Returns", show_header=True,
+            header_style="bold", box=None, padding=(0, 2),
+        )
+        ret_table.add_column("Category", min_width=14)
+        ret_table.add_column("Points", justify="right")
+        ret_table.add_column("Due Turn", justify="right")
+        for r in sorted(fs.deferred_returns, key=lambda x: x["turn_due"]):
+            label = "R&D" if r["category"] == "r_and_d" else "Education"
+            ret_table.add_row(label, str(r["amount"]), f"T{r['turn_due']}")
+        console.print(ret_table)
+
     # Adversary estimates (expanded — MEO/GEO/cislunar columns)
     if snapshot.adversary_estimates:
         adv_table = Table(
@@ -63,7 +77,7 @@ def display_situation(snapshot: GameStateSnapshot) -> None:
         adv_table.add_column("ASAT-K", justify="right")
         for fid, est in snapshot.adversary_estimates.items():
             adv_table.add_row(
-                fid,
+                snapshot.faction_names.get(fid, fid),
                 str(est.leo_nodes), str(est.meo_nodes),
                 str(est.geo_nodes), str(est.cislunar_nodes),
                 str(est.asat_kinetic),
@@ -74,8 +88,9 @@ def display_situation(snapshot: GameStateSnapshot) -> None:
     if snapshot.incoming_threats:
         console.print()
         for threat in snapshot.incoming_threats:
+            attacker_name = snapshot.faction_names.get(threat['attacker'], threat['attacker'])
             console.print(
-                f"  [bold red]⚠ KINETIC APPROACH from {threat['attacker']}"
+                f"  [bold red]⚠ KINETIC APPROACH from {attacker_name}"
                 f" (declared T{threat['declared_turn']}) — IMPACT IMMINENT[/bold red]"
             )
 

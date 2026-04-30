@@ -167,24 +167,50 @@ class TurnSummary:
 
     def _section_dominance(self) -> Optional[RenderableType]:
         table = Table(show_header=True, header_style="bold", box=None, padding=(0, 2))
-        table.add_column("Coalition", min_width=12)
+        table.add_column("Coalition", min_width=14)
+        table.add_column("Members", min_width=28)
         table.add_column("Dominance", justify="right")
         table.add_column("Bar")
         table.add_column("vs. Threshold", justify="right")
-        for cid in self.coalition_states:
+        for cid, coalition in self.coalition_states.items():
             dom = self.dominance.get(cid, 0.0)
             color = self.coalition_colors.get(cid, "white")
             filled = min(16, max(0, round(dom * 16)))
             bar = f"[{color}]{'█'*filled}{'░'*(16-filled)}[/{color}]"
             gap = dom - self.victory_threshold
             gap_color = "green" if gap >= 0 else "red"
+            member_names = ", ".join(
+                self.faction_states[mid].name
+                for mid in coalition.member_ids
+                if mid in self.faction_states
+            )
             table.add_row(
-                cid,
+                f"[{color}]{cid}[/{color}]",
+                f"[dim]{member_names}[/dim]",
                 f"[{color}]{dom:.1%}[/{color}]",
                 bar,
                 f"[{gap_color}]{gap:+.1%}[/{gap_color}]",
             )
-        return Panel(table, title="[bold]ORBITAL DOMINANCE[/bold]", border_style="cyan")
+
+        # Victory trajectory footer
+        turns_left = self.total_turns - self.turn
+        leader_cid = max(self.dominance, key=self.dominance.get)
+        leader_dom = self.dominance[leader_cid]
+        leader_color = self.coalition_colors.get(leader_cid, "white")
+        gap_to_win = self.victory_threshold - leader_dom
+        if gap_to_win <= 0:
+            footer = f"[bold {leader_color}]{leader_cid}[/bold {leader_color}] has reached the victory threshold."
+        else:
+            footer = (
+                f"[{leader_color}]{leader_cid}[/{leader_color}] needs"
+                f" [bold]+{gap_to_win:.1%}[/bold] to reach the victory threshold"
+                f" — [dim]{turns_left} turn{'s' if turns_left != 1 else ''} remaining[/dim]"
+            )
+        return Panel(
+            Group(table, Text(f"\n  {footer}")),
+            title="[bold]ORBITAL DOMINANCE[/bold]",
+            border_style="cyan",
+        )
 
     def _section_metrics(self) -> Optional[RenderableType]:
         table = Table(show_header=True, header_style="bold", box=None, padding=(0, 2))

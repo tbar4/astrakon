@@ -228,6 +228,7 @@ class GameReferee:
             turn_log_summary=self._turn_log_summary,
             joint_force_effectiveness=fs.joint_force_effectiveness,
             incoming_threats=incoming_threats,
+            faction_names={fid: s.name for fid, s in self.faction_states.items()},
         )
 
     async def _fallback_decision(

@@ -155,6 +155,7 @@ class GameStateSnapshot(BaseModel):
     debris_level: float = 0.0
     joint_force_effectiveness: float = 1.0
     incoming_threats: list[dict[str, Any]] = []  # kinetic approaches visible via SDA
+    faction_names: dict[str, str] = {}  # faction_id -> display name for all factions
 
 
 class CrisisEvent(BaseModel):
