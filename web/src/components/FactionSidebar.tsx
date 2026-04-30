@@ -100,6 +100,38 @@ export default function FactionSidebar({ factionState: fs, turn, totalTurns, ten
         </div>
       </div>
 
+      {/* Maneuver budget */}
+      <div style={{ marginTop: 10, padding: '6px 0', borderTop: '1px solid #00d4ff11' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span style={{ fontFamily: 'Courier New', fontSize: 10, color: '#475569' }}>MANEUVER BUDGET</span>
+          <span style={{ fontFamily: 'Courier New', fontSize: 11, color:
+            (fs.maneuver_budget ?? 10) < 2 ? '#ef4444' :
+            (fs.maneuver_budget ?? 10) < 5 ? '#f59e0b' : '#00d4ff'
+          }}>
+            {(fs.maneuver_budget ?? 10).toFixed(1)} DV
+          </span>
+        </div>
+        <div style={{ height: 3, background: '#0f1c2d', marginTop: 4, borderRadius: 2 }}>
+          <div style={{
+            height: '100%', borderRadius: 2,
+            width: `${Math.min(((fs.maneuver_budget ?? 10) / 20) * 100, 100)}%`,
+            background: (fs.maneuver_budget ?? 10) < 2 ? '#ef4444' :
+                        (fs.maneuver_budget ?? 10) < 5 ? '#f59e0b' : '#00d4ff',
+            transition: 'width 0.3s',
+          }} />
+        </div>
+      </div>
+
+      {/* Cognitive penalty — only shown when significant */}
+      {(fs.cognitive_penalty ?? 0) > 0.1 && (
+        <div style={{ marginTop: 6, display: 'flex', justifyContent: 'space-between' }}>
+          <span style={{ fontFamily: 'Courier New', fontSize: 10, color: '#f97316' }}>COGNITIVE DEGRADATION</span>
+          <span style={{ fontFamily: 'Courier New', fontSize: 10, color: '#f97316' }}>
+            {Math.round((fs.cognitive_penalty ?? 0) * 100)}%
+          </span>
+        </div>
+      )}
+
       {fs.deferred_returns.length > 0 && (
         <div style={{ marginTop: 10 }}>
           <div className="panel-title" style={{ fontSize: 9 }}>PENDING RETURNS</div>
