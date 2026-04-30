@@ -29,10 +29,14 @@ export default function MapTabContainer({
   gameState, coalitionDominance, turnHistory, prevFactionStates, humanAdversaryEstimates,
 }: Props) {
   const [activeTab, setActiveTab] = useState<Tab>('orbital')
-  const [_selectedShell, _setSelectedShell] = useState<string | null>(null)
-  const [_selectedFaction, _setSelectedFaction] = useState<string | null>(null)
+  const [selectedShell, setSelectedShell] = useState<string | null>(null)
+  const [selectedFaction, setSelectedFaction] = useState<string | null>(null)
 
-  // _selectedShell, _selectedFaction, _setSelectedShell, _setSelectedFaction will be wired to child components in later tasks
+  // selectedShell, selectedFaction, setSelectedShell, setSelectedFaction will be wired to child components in later tasks
+  void selectedShell
+  void setSelectedShell
+  void selectedFaction
+  void setSelectedFaction
   void prevFactionStates
   void humanAdversaryEstimates
 
