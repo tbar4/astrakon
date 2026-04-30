@@ -87,6 +87,26 @@ function NewGameTab() {
     }
   }
 
+  async function handleSpectate() {
+    if (!selectedId) return
+    setLoading(true)
+    setError(null)
+    try {
+      // All factions set to AI for spectator mode
+      const spectatorConfig: AgentConfig[] = agentConfig.map((c, i) => ({
+        ...c,
+        agent_type: i === 0 ? 'rule_based' : c.agent_type === 'web' ? 'rule_based' : c.agent_type,
+        use_advisor: false,
+      }))
+      const created = await createGame(selectedId, spectatorConfig)
+      navigate(`/spectate/${created.state.session_id}`)
+    } catch (e) {
+      setError(String(e))
+    } finally {
+      setLoading(false)
+    }
+  }
+
   const selected = scenarios.find((s) => s.id === selectedId)
 
   return (
@@ -131,10 +151,16 @@ function NewGameTab() {
         </>
       )}
 
-      <button className="btn-primary" onClick={handleStart} disabled={isLoading || !selectedId}
-        style={{ marginTop: 24, width: '100%' }}>
-        {isLoading ? 'INITIALIZING...' : '[ LAUNCH SIMULATION ]'}
-      </button>
+      <div style={{ display: 'flex', gap: 8, marginTop: 24 }}>
+        <button className="btn-primary" onClick={handleStart} disabled={isLoading || !selectedId}
+          style={{ flex: 1 }}>
+          {isLoading ? 'INITIALIZING...' : '[ LAUNCH SIMULATION ]'}
+        </button>
+        <button className="btn-primary" onClick={() => void handleSpectate()} disabled={isLoading || !selectedId}
+          style={{ flex: '0 0 auto', fontSize: 10, padding: '6px 16px', borderColor: '#f59e0b', color: '#f59e0b' }}>
+          WATCH AI vs AI
+        </button>
+      </div>
     </div>
   )
 }
