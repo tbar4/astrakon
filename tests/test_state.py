@@ -57,3 +57,29 @@ def test_game_state_snapshot_serializes():
     data = snapshot.model_dump()
     assert data["turn"] == 1
     assert data["faction_id"] == "ussf"
+
+
+def test_faction_state_has_maneuver_budget():
+    fs = FactionState(faction_id="x", name="X", budget_per_turn=100,
+                      current_budget=100, assets=FactionAssets())
+    assert fs.maneuver_budget == 10.0
+
+
+def test_faction_state_has_cognitive_penalty():
+    fs = FactionState(faction_id="x", name="X", budget_per_turn=100,
+                      current_budget=100, assets=FactionAssets())
+    assert fs.cognitive_penalty == 0.0
+
+
+def test_game_state_snapshot_has_debris_fields():
+    snap = GameStateSnapshot(
+        turn=1, phase=Phase.INVEST, faction_id="x",
+        faction_state=FactionState(faction_id="x", name="X",
+                                   budget_per_turn=100, current_budget=100,
+                                   assets=FactionAssets()),
+        ally_states={}, adversary_estimates={}, coalition_states={},
+        available_actions=[],
+    )
+    assert snap.debris_fields == {}
+    assert snap.access_windows == {"leo": True, "meo": True, "geo": True, "cislunar": True}
+    assert snap.escalation_rung == 0

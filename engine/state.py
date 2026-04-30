@@ -9,6 +9,16 @@ class Phase(str, Enum):
     RESPONSE = "response"
 
 
+ESCALATION_RUNG_NAMES: dict[int, str] = {
+    0: "Peacetime Competition",
+    1: "Contested — EW/Jamming Active",
+    2: "Degraded — Reversible Interference",
+    3: "Threshold — Co-orbital Approaches Declared",
+    4: "Kinetic — Debris-Creating Strikes",
+    5: "Escalatory — Cross-Domain Retaliation",
+}
+
+
 class FactionAssets(BaseModel):
     leo_nodes: int = 0
     meo_nodes: int = 0
@@ -129,6 +139,8 @@ class FactionState(BaseModel):
     disruption_score: float = 0.0
     market_share: float = 0.0
     joint_force_effectiveness: float = 1.0
+    maneuver_budget: float = 10.0       # delta-v pool; replenishes each turn
+    cognitive_penalty: float = 0.0      # 0.0–1.0; degrades SDA and coordination
 
     def sda_level(self) -> float:
         # 0.0–1.0 based on sensor count; 12 sensors = ~0.5, 24 = ~1.0
@@ -147,7 +159,7 @@ class GameStateSnapshot(BaseModel):
     faction_id: str
     faction_state: FactionState
     ally_states: dict[str, FactionState]
-    adversary_estimates: dict[str, FactionAssets]
+    adversary_estimates: dict[str, dict]  # faction_id → filtered FactionAssets dict
     coalition_states: dict[str, CoalitionState]
     available_actions: list[str]
     turn_log_summary: str = ""
@@ -156,6 +168,11 @@ class GameStateSnapshot(BaseModel):
     joint_force_effectiveness: float = 1.0
     incoming_threats: list[dict[str, Any]] = []  # kinetic approaches visible via SDA
     faction_names: dict[str, str] = {}  # faction_id -> display name for all factions
+    debris_fields: dict[str, float] = {}   # shell → severity 0.0–1.0
+    access_windows: dict[str, bool] = Field(
+        default_factory=lambda: {"leo": True, "meo": True, "geo": True, "cislunar": True}
+    )
+    escalation_rung: int = 0               # 0–5 named escalation level
 
 
 class CrisisEvent(BaseModel):
