@@ -229,6 +229,11 @@ class GameReferee:
                 else:
                     raise ValueError(f"Unknown deferred return category: {r['category']}")
             fs.deferred_returns = [r for r in fs.deferred_returns if r["turn_due"] > turn]
+        # Replenish maneuver budget each turn
+        for fs in self.faction_states.values():
+            self.sim.maneuver_budget_engine.replenish(fs)
+        # Decay orbital debris each turn
+        self._debris_fields = self.sim.debris_engine.decay(self._debris_fields)
 
     def _build_snapshot(
         self, faction_id: str, phase: Phase, available_actions: list[str]
@@ -301,6 +306,9 @@ class GameReferee:
             joint_force_effectiveness=fs.joint_force_effectiveness,
             incoming_threats=incoming_threats,
             faction_names={fid: s.name for fid, s in self.faction_states.items()},
+            debris_fields=dict(self._debris_fields),
+            escalation_rung=self._escalation_rung,
+            access_windows=self.sim.access_window_engine.compute(self._current_turn),
         )
 
     async def _fallback_decision(
@@ -355,6 +363,11 @@ class GameReferee:
 
     async def resolve_investment(self, turn: int, decisions: dict) -> None:
         """Resolve investment decisions (dict values may be Decision objects or JSON strings)."""
+        # Apply debris disruption at start of invest phase
+        self.faction_states, debris_log = self.sim.debris_engine.apply_debris_effects(
+            self.faction_states, self._debris_fields
+        )
+        self._turn_log.extend(debris_log)
         from engine.state import Decision
         for fid, raw_decision in decisions.items():
             decision = Decision.model_validate_json(raw_decision) if isinstance(raw_decision, str) else raw_decision
@@ -413,7 +426,15 @@ class GameReferee:
             target_fs.assets.cislunar_nodes -= nodes_hit
 
         attacker_fs.assets.asat_kinetic -= 1
-        self.debris_level = min(self.debris_level + 0.1 * nodes_hit, 1.0)
+        if regime in ("leo", "meo", "geo", "cislunar"):
+            self._debris_fields = self.sim.debris_engine.add_debris(
+                self._debris_fields, regime,
+                self.sim.debris_engine.DEBRIS_PER_NODE_KINETIC * nodes_hit
+            )
+        # Keep global debris_level as max of all shells for backward compat
+        self.debris_level = max(self._debris_fields.values()) if self._debris_fields else 0.0
+        # Raise escalation rung to at least 4 (kinetic strike)
+        self._escalation_rung = max(self._escalation_rung, 4)
         self._prev_turn_ops.append("kinetic_strike")
         attacker_fs.disruption_score += nodes_hit * 5
 
@@ -441,7 +462,12 @@ class GameReferee:
             nodes_hit = min(result["nodes_destroyed"], target_fs.assets.leo_nodes)
             target_fs.assets.leo_nodes -= nodes_hit
             attacker_fs.assets.asat_deniable -= 1
-            self.debris_level = min(self.debris_level + 0.05 * nodes_hit, 1.0)
+            self._debris_fields = self.sim.debris_engine.add_debris(
+                self._debris_fields, "leo",
+                self.sim.debris_engine.DEBRIS_PER_NODE_DENIABLE * nodes_hit
+            )
+            self.debris_level = max(self._debris_fields.values()) if self._debris_fields else 0.0
+            self._escalation_rung = max(self._escalation_rung, 5)  # cross-domain retaliation
             suffix = (
                 f" ({'attributed' if result['attributed'] else 'detected, source unclear'})"
                 if result["detected"] else " (undetected)"
@@ -462,7 +488,12 @@ class GameReferee:
             nodes_hit = min(result["nodes_destroyed"], target_fs.assets.leo_nodes)
             target_fs.assets.leo_nodes -= nodes_hit
             attacker_fs.assets.asat_kinetic -= 1
-            self.debris_level = min(self.debris_level + 0.1 * nodes_hit, 1.0)
+            self._debris_fields = self.sim.debris_engine.add_debris(
+                self._debris_fields, "leo",
+                self.sim.debris_engine.DEBRIS_PER_NODE_KINETIC * nodes_hit
+            )
+            self.debris_level = max(self._debris_fields.values()) if self._debris_fields else 0.0
+            self._escalation_rung = max(self._escalation_rung, 4)
             self._turn_log.append(
                 f"[RETALIATION-KINETIC] {attacker_fs.name} kinetic strike on "
                 f"{target_fs.name} ({regime.upper()}): {nodes_hit} nodes destroyed"
@@ -472,7 +503,10 @@ class GameReferee:
 
     def _apply_event_effect(self, event: CrisisEvent):
         if event.event_type == "asat_test":
-            self.debris_level = min(self.debris_level + 0.08, 1.0)
+            self._debris_fields = self.sim.debris_engine.add_debris(
+                self._debris_fields, "leo", 0.08
+            )
+            self.debris_level = max(self._debris_fields.values()) if self._debris_fields else 0.0
             self._turn_log.append("ASAT test generated debris field (+8%)")
         elif event.event_type == "jamming_incident":
             if event.affected_factions:
@@ -533,7 +567,11 @@ class GameReferee:
                         nodes_hit = min(result["nodes_destroyed"], target_fs.assets.leo_nodes)
                         target_fs.assets.leo_nodes -= nodes_hit
                         fs.assets.asat_deniable -= 1
-                        self.debris_level = min(self.debris_level + 0.05 * nodes_hit, 1.0)
+                        self._debris_fields = self.sim.debris_engine.add_debris(
+                            self._debris_fields, "leo",
+                            self.sim.debris_engine.DEBRIS_PER_NODE_DENIABLE * nodes_hit
+                        )
+                        self.debris_level = max(self._debris_fields.values()) if self._debris_fields else 0.0
                         fs.disruption_score += nodes_hit * 5
                         self._prev_turn_ops.append("deniable_strike")
                         detected = result["detected"]
