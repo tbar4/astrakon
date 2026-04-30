@@ -3,9 +3,8 @@ import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { advance, decide, getRecommendation } from '../api/client'
 import { useGameStore } from '../store/gameStore'
-import OrbitalMap from '../components/OrbitalMap'
 import FactionSidebar from '../components/FactionSidebar'
-import DominanceRail from '../components/DominanceRail'
+import MapTabContainer from '../components/MapTabContainer'
 import LoadingOverlay from '../components/LoadingOverlay'
 import AdvisorPanel from '../components/AdvisorPanel'
 import TurnSummary from '../components/TurnSummary'
@@ -201,9 +200,9 @@ export default function GamePage() {
 
         {/* LEFT PANEL */}
         <div style={{ flex: 2, display: 'flex', flexDirection: 'column', gap: 8, minHeight: 0, overflow: 'hidden' }}>
-          {/* Top box: faction info + coalition dominance side by side */}
-          <div style={{ flex: '0 1 auto', maxHeight: '45%', minHeight: 0, display: 'flex', flexDirection: 'row', gap: 8, overflow: 'hidden' }}>
-            <div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
+          {/* Top box: faction info */}
+          <div style={{ flex: '0 1 auto', maxHeight: '35%', minHeight: 0, overflow: 'hidden' }}>
+            <div style={{ overflowY: 'auto', height: '100%' }}>
               <FactionSidebar
                 factionState={fs}
                 turn={gameState.turn}
@@ -214,14 +213,17 @@ export default function GamePage() {
                 isJammed={isJammed}
               />
             </div>
-            <div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
-              <DominanceRail gameState={gameState} coalitionDominance={coalitionDominance} turnHistory={turnHistory} />
-            </div>
           </div>
 
-          {/* Center: orbital map fills remaining space */}
+          {/* Center: map tab panel fills remaining space */}
           <div style={{ flex: 1, minHeight: 0 }}>
-            <OrbitalMap gameState={gameState} coalitionDominance={coalitionDominance} prevFactionStates={prevFactionStates} humanAdversaryEstimates={gameState.human_adversary_estimates ?? {}} />
+            <MapTabContainer
+              gameState={gameState}
+              coalitionDominance={coalitionDominance}
+              turnHistory={turnHistory}
+              prevFactionStates={prevFactionStates}
+              humanAdversaryEstimates={gameState.human_adversary_estimates ?? {}}
+            />
           </div>
 
           {/* Bottom box: ops log */}
