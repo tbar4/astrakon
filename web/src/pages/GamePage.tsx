@@ -25,6 +25,7 @@ export default function GamePage() {
   } = useGameStore()
 
   const [showLog, setShowLog] = useState(false)
+  const [handoff, setHandoff] = useState<{ toName: string } | null>(null)
 
   useEffect(() => {
     if (!sessionId || !gameState) return
@@ -45,13 +46,18 @@ export default function GamePage() {
 
   async function handleDecision(decision: Record<string, unknown>) {
     if (!sessionId || !gameState) return
+    const prevHumanId = gameState.human_faction_id
     setLoading(true)
     setError(null)
     setRecommendation(null)
     try {
       const res = await decide(sessionId, gameState.current_phase as string, decision)
       setGameState(res.state, res.coalition_dominance)
-      if (res.state.current_phase === 'invest' && !res.state.game_over && res.state.turn > gameState.turn) {
+      // Hot-seat: detect player switch
+      if (res.state.human_faction_id !== prevHumanId && !res.state.game_over && !res.state.awaiting_next_turn) {
+        const toName = res.state.faction_states[res.state.human_faction_id]?.name ?? res.state.human_faction_id
+        setHandoff({ toName })
+      } else if (res.state.current_phase === 'invest' && !res.state.game_over && res.state.turn > gameState.turn) {
         setShowSummary(true)
       } else if (res.state.human_snapshot && gameState.use_advisor) {
         await fetchRecommendation(res.state.current_phase as 'invest' | 'operations' | 'response')
@@ -65,13 +71,17 @@ export default function GamePage() {
 
   async function handleNextTurn() {
     if (!sessionId) return
+    const prevHumanId = gameState?.human_faction_id
     setShowSummary(false)
     setLoading(true)
     setError(null)
     try {
       const res = await advance(sessionId)
       setGameState(res.state, res.coalition_dominance)
-      if (res.state.human_snapshot && gameState?.use_advisor) {
+      if (res.state.human_faction_id !== prevHumanId && !res.state.game_over) {
+        const toName = res.state.faction_states[res.state.human_faction_id]?.name ?? res.state.human_faction_id
+        setHandoff({ toName })
+      } else if (res.state.human_snapshot && gameState?.use_advisor) {
         await fetchRecommendation(res.state.current_phase as 'invest' | 'operations' | 'response')
       }
     } catch (e) {
@@ -266,6 +276,25 @@ export default function GamePage() {
       </div>
 
       {isLoading && <LoadingOverlay />}
+
+      {handoff && (
+        <div style={{
+          position: 'fixed', inset: 0, background: 'rgba(2,11,24,0.97)', zIndex: 200,
+          display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 24,
+        }}>
+          <div className="mono" style={{ fontSize: 11, color: '#f59e0b', letterSpacing: 4 }}>◆ HOT SEAT ◆</div>
+          <div className="mono" style={{ fontSize: 22, color: '#00d4ff', letterSpacing: 4 }}>
+            {handoff.toName.toUpperCase()}
+          </div>
+          <div className="mono" style={{ fontSize: 12, color: '#64748b', textAlign: 'center', maxWidth: 360 }}>
+            Hand the device to the next player.<br />Press READY when they are in position.
+          </div>
+          <button className="btn-primary" onClick={() => setHandoff(null)}
+            style={{ fontSize: 12, padding: '8px 32px', letterSpacing: 3 }}>
+            [ READY ]
+          </button>
+        </div>
+      )}
 
       {showLog && sessionId && (
         <DecisionLog

@@ -79,6 +79,7 @@ export interface GameState {
     affected_factions: string[]
   }>
   human_faction_id: string
+  human_faction_ids: string[]
   human_snapshot: GameStateSnapshot | null
   use_advisor: boolean
   game_over: boolean

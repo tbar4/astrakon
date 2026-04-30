@@ -24,6 +24,7 @@ class GameState(BaseModel):
     prev_turn_ops: list[str] = []
     events: list[dict] = []                  # crisis events this turn (for summary phase)
     human_faction_id: str
+    human_faction_ids: list[str] = []       # all web-controlled factions (≥1)
     human_snapshot: Optional[dict] = None   # serialized GameStateSnapshot
     use_advisor: bool = False
     agent_config: list[dict] = []

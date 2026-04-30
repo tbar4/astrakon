@@ -68,8 +68,9 @@ function NewGameTab() {
   }
 
   async function handleStart() {
-    if (!selectedId || agentConfig.filter((c) => c.agent_type === 'web').length !== 1) {
-      setError('Exactly one faction must be set to "Human (web)"')
+    const webCount = agentConfig.filter((c) => c.agent_type === 'web').length
+    if (!selectedId || webCount === 0) {
+      setError('At least one faction must be set to "Human (web)"')
       return
     }
     setLoading(true)

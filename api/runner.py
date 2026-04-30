@@ -112,9 +112,8 @@ async def create_game(
 ) -> GameState:
     scenario = _load_scenario(scenario_id)
     session_id = str(uuid.uuid4())
-    human_faction_id = next(
-        c["faction_id"] for c in agent_config if c["agent_type"] == "web"
-    )
+    human_faction_ids = [c["faction_id"] for c in agent_config if c["agent_type"] == "web"]
+    human_faction_id = human_faction_ids[0]
     use_advisor = next(
         (c.get("use_advisor", False) for c in agent_config if c["faction_id"] == human_faction_id),
         False,
@@ -149,6 +148,7 @@ async def create_game(
         faction_states=faction_states,
         coalition_states=coalition_states,
         human_faction_id=human_faction_id,
+        human_faction_ids=human_faction_ids,
         use_advisor=use_advisor,
         agent_config=agent_config,
         victory_threshold=scenario.victory.coalition_orbital_dominance,
@@ -283,8 +283,9 @@ async def advance(
         next_fid = undecided[0]
         agent = agents[next_fid]
 
-        if next_fid == state.human_faction_id:
-            # Build snapshot for human
+        if next_fid in state.human_faction_ids:
+            # Build snapshot for the currently-active human player
+            state.human_faction_id = next_fid
             referee, audit = _make_referee(scenario, agents, state)
             available = {
                 Phase.INVEST: ["allocate_budget"],
@@ -292,7 +293,7 @@ async def advance(
                 Phase.RESPONSE: ["escalate", "de_escalate", "retaliate", "public_statement"],
             }[state.current_phase]
             state.human_snapshot = referee._build_snapshot(
-                state.human_faction_id, state.current_phase, available
+                next_fid, state.current_phase, available
             ).model_dump()
             await save_session(state, db_path=db_path)
             break  # waiting for human
