@@ -3,6 +3,8 @@ import { useState } from 'react'
 import type { GameState, FactionState } from '../types'
 import type { TurnSnapshot } from '../store/gameStore'
 import DominanceStrip from './DominanceStrip'
+import OpsTab from './OpsTab'
+import AARPanel from './AARPanel'
 
 type Tab = 'orbital' | 'deltav' | 'ops' | 'aar'
 
@@ -77,18 +79,18 @@ export default function MapTabContainer({
           </div>
         )}
         {activeTab === 'ops' && (
-          <div className="panel" style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <span style={{ fontFamily: 'Courier New', fontSize: 10, color: '#334155' }}>
-              OPS — LOADING
-            </span>
-          </div>
+          <OpsTab
+            gameState={gameState}
+            coalitionDominance={coalitionDominance}
+            turnHistory={turnHistory}
+          />
         )}
         {activeTab === 'aar' && (
-          <div className="panel" style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <span style={{ fontFamily: 'Courier New', fontSize: 10, color: '#334155' }}>
-              ◆ AFTER ACTION REVIEW
-            </span>
-          </div>
+          <AARPanel
+            gameState={gameState}
+            coalitionDominance={coalitionDominance}
+            turnHistory={turnHistory}
+          />
         )}
       </div>
 
