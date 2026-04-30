@@ -164,6 +164,7 @@ export interface InvestmentDecision {
     influence_ops?: number
     education?: number
     covert?: number
+    kinetic_weapons?: number
     diplomacy?: number
     rationale: string
   }

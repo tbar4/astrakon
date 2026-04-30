@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react'
 import ReactMarkdown from 'react-markdown'
 import { useNavigate } from 'react-router-dom'
 import { listScenarios, listSessions, createGame, getState, advance, generateAar, listAars, getScenario, createScenario, updateScenario, deleteScenario } from '../api/client'
-import type { SavedAar } from '../api/client'
+import type { SavedAar, AarResult } from '../api/client'
 import { useGameStore } from '../store/gameStore'
 import type { ScenarioSummary, SessionSummary, AgentConfig, ScenarioDetail, ScenarioFactionDetail } from '../types'
 
@@ -245,6 +245,7 @@ function SessionAarRow({ s }: { s: SessionSummary }) {
   const [selectedIdx, setSelectedIdx] = useState<number | null>(null)
   const [focus, setFocus] = useState('')
   const [generating, setGenerating] = useState(false)
+  const [lastGenerated, setLastGenerated] = useState<AarResult | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   async function openPanel() {
@@ -264,6 +265,7 @@ function SessionAarRow({ s }: { s: SessionSummary }) {
     setError(null)
     try {
       const result = await generateAar(s.session_id, focus, force)
+      setLastGenerated(result.cached ? null : result)
       const aars = await listAars(s.session_id)
       setSavedAars(aars)
       const idx = aars.findIndex(a => a.focus === result.focus)
@@ -322,7 +324,7 @@ function SessionAarRow({ s }: { s: SessionSummary }) {
               <div style={{ fontSize: 10, color: '#475569', ...MONO, marginBottom: 6, letterSpacing: 1 }}>SAVED REPORTS</div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
                 {savedAars.map((a, i) => (
-                  <button key={i} onClick={() => setSelectedIdx(i)}
+                  <button key={i} onClick={() => { setSelectedIdx(i); setLastGenerated(null) }}
                     style={{
                       textAlign: 'left', background: selectedIdx === i ? '#00d4ff08' : 'none',
                       border: `1px solid ${selectedIdx === i ? '#00d4ff22' : '#00d4ff0a'}`,
@@ -354,7 +356,7 @@ function SessionAarRow({ s }: { s: SessionSummary }) {
           {/* Active report */}
           {active && (
             <>
-              <div style={{ display: 'flex', gap: 8, marginBottom: 10, alignItems: 'center' }}>
+              <div style={{ display: 'flex', gap: 8, marginBottom: 6, alignItems: 'center' }}>
                 <span style={{ fontSize: 10, color: '#475569', ...MONO, flex: 1 }}>
                   {active.focus ? `FOCUS: "${active.focus}"` : 'STANDARD REPORT'}
                 </span>
@@ -365,6 +367,16 @@ function SessionAarRow({ s }: { s: SessionSummary }) {
                 <button className="btn-primary" onClick={() => openPdf(active.text)}
                   style={{ fontSize: 10, padding: '2px 10px', borderColor: '#f59e0b66', color: '#f59e0b' }}>↓ PDF</button>
               </div>
+              {lastGenerated?.usage && (
+                <div style={{ display: 'flex', gap: 16, padding: '5px 10px', marginBottom: 8, border: '1px solid #00d4ff11', borderRadius: 2, background: '#020b18' }}>
+                  <span className="mono" style={{ fontSize: 9, color: '#334155', letterSpacing: 1 }}>AAR TOKENS</span>
+                  <span className="mono" style={{ fontSize: 9, color: '#475569' }}>IN {lastGenerated.usage.input_tokens.toLocaleString()}</span>
+                  <span className="mono" style={{ fontSize: 9, color: '#475569' }}>OUT {lastGenerated.usage.output_tokens.toLocaleString()}</span>
+                  {(lastGenerated.usage.cache_read_tokens ?? 0) > 0 && (
+                    <span className="mono" style={{ fontSize: 9, color: '#334155' }}>CACHE HIT {lastGenerated.usage.cache_read_tokens!.toLocaleString()}</span>
+                  )}
+                </div>
+              )}
               <div style={{ fontSize: 13, lineHeight: 1.75, color: '#94a3b8', fontFamily: 'Georgia, serif' }}>
                 <ReactMarkdown
                   components={{

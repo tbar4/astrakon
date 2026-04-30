@@ -108,6 +108,18 @@ export default function SpectatePage() {
         </span>
         <span style={{ flex: 1 }} />
         <span className="mono" style={{ color: '#64748b', fontSize: 10 }}>{gameState.scenario_name}</span>
+        {Object.keys(gameState.token_totals ?? {}).length > 0 && (() => {
+          const totals = gameState.token_totals ?? {}
+          const totalIn = Object.values(totals).reduce((s, t) => s + (t.input_tokens ?? 0), 0)
+          const totalOut = Object.values(totals).reduce((s, t) => s + (t.output_tokens ?? 0), 0)
+          const total = totalIn + totalOut
+          const fmt = total >= 1000 ? `${(total / 1000).toFixed(1)}K` : String(total)
+          return (
+            <span className="mono" style={{ color: '#475569', fontSize: 9, letterSpacing: 1 }} title={`AI tokens: ${totalIn.toLocaleString()} in / ${totalOut.toLocaleString()} out`}>
+              ⬡ {fmt} tok
+            </span>
+          )
+        })()}
 
         {/* Speed controls */}
         <div style={{ display: 'flex', gap: 4 }}>

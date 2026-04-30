@@ -17,6 +17,7 @@ class InvestmentResolver:
     CISLUNAR_NODE_COST = 40        # Strategic high ground — 4× dominance weight
     LAUNCH_CAPACITY_COST = 15
     ASAT_DENIABLE_COST = 25
+    ASAT_KINETIC_COST = 40
     EW_JAMMER_COST = 12
 
     RD_DELAY = 3
@@ -33,6 +34,7 @@ class InvestmentResolver:
         geo_nodes = 0
         cislunar_nodes = 0
         launch_capacity = 0
+        asat_kinetic = 0
         asat_deniable = 0
         ew_jammers = 0
 
@@ -92,6 +94,12 @@ class InvestmentResolver:
             asat_deniable += asat
             spent += asat * self.ASAT_DENIABLE_COST
 
+        if allocation.kinetic_weapons > 0:
+            pts = int(budget * allocation.kinetic_weapons)
+            asat = pts // self.ASAT_KINETIC_COST
+            asat_kinetic += asat
+            spent += asat * self.ASAT_KINETIC_COST
+
         if allocation.influence_ops > 0:
             pts = int(budget * allocation.influence_ops)
             jammers = pts // self.EW_JAMMER_COST
@@ -104,6 +112,7 @@ class InvestmentResolver:
             geo_nodes=geo_nodes,
             cislunar_nodes=cislunar_nodes,
             launch_capacity=launch_capacity,
+            asat_kinetic=asat_kinetic,
             asat_deniable=asat_deniable,
             ew_jammers=ew_jammers,
         )

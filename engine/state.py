@@ -56,6 +56,7 @@ class InvestmentAllocation(BaseModel):
     education: float = 0.0
     covert: float = 0.0
     diplomacy: float = 0.0
+    kinetic_weapons: float = 0.0  # direct-ascent ASAT interceptors (40 pts each, triggers escalation)
     rationale: str = ""
 
     def total(self) -> float:
@@ -63,7 +64,7 @@ class InvestmentAllocation(BaseModel):
             self.r_and_d + self.constellation + self.meo_deployment +
             self.geo_deployment + self.cislunar_deployment +
             self.launch_capacity + self.commercial + self.influence_ops +
-            self.education + self.covert + self.diplomacy
+            self.education + self.covert + self.diplomacy + self.kinetic_weapons
         )
 
     @model_validator(mode="after")
@@ -72,7 +73,7 @@ class InvestmentAllocation(BaseModel):
             self.r_and_d, self.constellation, self.meo_deployment,
             self.geo_deployment, self.cislunar_deployment,
             self.launch_capacity, self.commercial, self.influence_ops,
-            self.education, self.covert, self.diplomacy,
+            self.education, self.covert, self.diplomacy, self.kinetic_weapons,
         ]
         if any(f < 0.0 for f in fields):
             raise ValueError("All investment allocations must be >= 0.0")

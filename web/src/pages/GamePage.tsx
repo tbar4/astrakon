@@ -276,6 +276,7 @@ export default function GamePage() {
             <OpsPanel
               factionNames={factionNames}
               humanFactionId={gameState.human_faction_id}
+              asatKinetic={fs.assets.asat_kinetic}
               onSubmit={handleDecision}
               disabled={isLoading}
             />

@@ -4,6 +4,7 @@ import { useState } from 'react'
 interface Props {
   factionNames: Record<string, string>
   humanFactionId: string
+  asatKinetic: number
   onSubmit: (decision: Record<string, unknown>) => void
   disabled: boolean
 }
@@ -24,7 +25,7 @@ const MISSIONS = [
 
 type ActionKey = typeof ACTION_TYPES[number]['key']
 
-export default function OpsPanel({ factionNames, humanFactionId, onSubmit, disabled }: Props) {
+export default function OpsPanel({ factionNames, humanFactionId, asatKinetic, onSubmit, disabled }: Props) {
   const [actionType, setActionType] = useState<ActionKey>('task_assets')
   const [target, setTarget] = useState('')
   const [mission, setMission] = useState('sda_sweep')
@@ -74,18 +75,23 @@ export default function OpsPanel({ factionNames, humanFactionId, onSubmit, disab
       {actionType === 'task_assets' && (
         <div style={{ marginBottom: 12 }}>
           <div className="panel-title" style={{ fontSize: 9 }}>MISSION</div>
-          {MISSIONS.map(({ key, label }) => (
-            <label key={key} style={{ display: 'flex', gap: 8, padding: '4px 0', cursor: 'pointer' }}>
-              <input
-                type="radio" name="mission" value={key}
-                checked={mission === key}
-                onChange={() => setMission(key)}
-                disabled={disabled}
-                style={{ accentColor: '#00d4ff' }}
-              />
-              <span style={{ fontSize: 11, color: '#94a3b8' }}>{label}</span>
-            </label>
-          ))}
+          {MISSIONS.map(({ key, label }) => {
+            const noAsats = key === 'intercept' && asatKinetic === 0
+            return (
+              <label key={key} style={{ display: 'flex', gap: 8, padding: '4px 0', cursor: noAsats ? 'not-allowed' : 'pointer', opacity: noAsats ? 0.4 : 1 }}>
+                <input
+                  type="radio" name="mission" value={key}
+                  checked={mission === key}
+                  onChange={() => setMission(key)}
+                  disabled={disabled || noAsats}
+                  style={{ accentColor: '#00d4ff' }}
+                />
+                <span style={{ fontSize: 11, color: '#94a3b8' }}>
+                  {label}{noAsats ? ' — no kinetic ASATs' : ''}
+                </span>
+              </label>
+            )
+          })}
         </div>
       )}
 

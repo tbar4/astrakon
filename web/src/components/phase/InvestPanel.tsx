@@ -8,17 +8,18 @@ interface Props {
 }
 
 const CATEGORIES = [
-  { key: 'constellation', label: 'LEO Constellation (5 pts/node)' },
-  { key: 'meo_deployment', label: 'MEO Deployment (12 pts/node, 2×)' },
-  { key: 'geo_deployment', label: 'GEO Deployment (25 pts/node, 3×)' },
-  { key: 'cislunar_deployment', label: 'Cislunar (40 pts/node, 4×)' },
-  { key: 'r_and_d', label: 'R&D (payoff in 3 turns)' },
-  { key: 'commercial', label: 'Commercial (market share)' },
-  { key: 'influence_ops', label: 'Influence Ops' },
-  { key: 'covert', label: 'Covert' },
-  { key: 'diplomacy', label: 'Diplomacy' },
-  { key: 'education', label: 'Education (payoff in 6 turns)' },
-  { key: 'launch_capacity', label: 'Launch Capacity' },
+  { key: 'constellation', label: 'LEO Constellation (5 pts/node)', desc: 'Cheap, high-volume nodes in Low Earth Orbit. Core of SDA coverage and comms. Most vulnerable to kinetic ASAT attack.' },
+  { key: 'meo_deployment', label: 'MEO Deployment (12 pts/node, 2×)', desc: 'GPS & navigation band. Harder to target than LEO. 2× orbital dominance weight. Key for precision strike support.' },
+  { key: 'geo_deployment', label: 'GEO Deployment (25 pts/node, 3×)', desc: 'Geostationary comms relays & missile-warning satellites. 3× dominance weight. Very costly to replace once destroyed.' },
+  { key: 'cislunar_deployment', label: 'Cislunar (40 pts/node, 4×)', desc: 'Nodes in cis-lunar space. 4× dominance weight. Controls future space economy. Beyond most ASAT range.' },
+  { key: 'r_and_d', label: 'R&D (payoff in 3 turns)', desc: 'Budget invested now returns with interest in 3 turns. No immediate tactical effect — plan ahead.' },
+  { key: 'commercial', label: 'Commercial (market share)', desc: 'Expand satellite services revenue. Grows budget-per-turn income over time through market share gains.' },
+  { key: 'influence_ops', label: 'Influence Ops', desc: 'Information & psychological operations. Erodes adversary coalition loyalty and undermines public support.' },
+  { key: 'covert', label: 'Covert', desc: 'Deniable cyber and space operations. Builds ASAT-deniable capacity to act without triggering formal escalation.' },
+  { key: 'kinetic_weapons', label: 'Kinetic Weapons (40 pts/weapon)', desc: '⚠ Direct-ascent interceptors. One-use weapons that destroy enemy satellite nodes. Creates orbital debris and triggers escalation.' },
+  { key: 'diplomacy', label: 'Diplomacy', desc: 'Alliance-building and coalition maintenance. Strengthens partner loyalty and enables coordination bonuses.' },
+  { key: 'education', label: 'Education (payoff in 6 turns)', desc: 'Workforce & doctrine investment. Highest return multiplier but 6-turn delay. Best for extended campaigns.' },
+  { key: 'launch_capacity', label: 'Launch Capacity', desc: 'Ground-based launch infrastructure. Expands how many satellite nodes you can deploy per turn.' },
 ] as const
 
 type CategoryKey = typeof CATEGORIES[number]['key']
@@ -57,12 +58,13 @@ export default function InvestPanel({ budget, onSubmit, disabled }: Props) {
         </span>
       </div>
 
-      {CATEGORIES.map(({ key, label }) => (
+      {CATEGORIES.map(({ key, label, desc }) => (
         <div key={key} style={{ marginBottom: 8 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, marginBottom: 3 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, marginBottom: 1 }}>
             <span style={{ color: '#94a3b8' }}>{label}</span>
             <span className="mono" style={{ color: '#00d4ff' }}>{(allocs[key] * 100).toFixed(0)}%</span>
           </div>
+          <div style={{ fontSize: 9, color: '#334155', marginBottom: 3, lineHeight: 1.4 }}>{desc}</div>
           <input
             type="range" min={0} max={100} step={5}
             value={allocs[key] * 100}

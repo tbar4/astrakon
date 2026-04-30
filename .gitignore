@@ -1,4 +1,9 @@
 .worktrees/
+.DS_Store
+.claude/
+.superpowers/
+docs/superpowers/
+uv.lock
 __pycache__/
 *.py[cod]
 *.pyo
