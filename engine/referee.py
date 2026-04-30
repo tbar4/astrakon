@@ -122,6 +122,7 @@ class GameReferee:
             "event_sda_malus": dict(self._event_sda_malus),
             "prev_turn_ops": list(self._prev_turn_ops),
             "pending_kinetic_approaches": list(self._pending_kinetic_approaches),
+            "current_turn": self._current_turn,
         }
 
     async def run(self) -> GameResult:
@@ -469,7 +470,8 @@ class GameReferee:
     async def resolve_operations(self, turn: int, decisions: dict) -> None:
         """Resolve operations decisions. Call after pending kinetics are handled."""
         from engine.state import Decision
-        self._prev_turn_ops = []
+        kinetic_entries = [e for e in self._prev_turn_ops if 'kinetic' in e]
+        self._prev_turn_ops = kinetic_entries
         self._coordination_bonuses = {}
 
         for fid, raw_decision in decisions.items():
@@ -622,7 +624,6 @@ class GameReferee:
 
     async def _run_response_phase(self, turn: int):
         events = self.generate_turn_events(turn)
-        self._turn_log_summary = self._build_turn_log_summary(turn)
         decisions = await self._collect_decisions(
             Phase.RESPONSE,
             ["escalate", "de_escalate", "retaliate", "emergency_reallocation", "public_statement"]
