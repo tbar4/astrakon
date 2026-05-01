@@ -127,3 +127,53 @@ def test_turn_advances_to_total():
     for _ in range(14):
         _full_turn(g, invest_idx=0)
     assert g.is_terminal()
+
+
+# ── Task 9 tests ──────────────────────────────────────────────────────────────
+
+def test_returns_draw():
+    g = make_game()
+    for _ in range(14):
+        _full_turn(g, invest_idx=0)
+    assert g.is_terminal()
+    r = g.returns()
+    assert all(v == 0.0 for v in r)
+
+
+def test_returns_win():
+    g = make_game()
+    g.faction_states["ussf"].assets.geo_nodes = 1000
+    g.faction_states["ussf"].assets.cislunar_nodes = 1000
+    g._recompute_dominance()
+    g._winner_coalition = "blue"
+    r = g.returns()
+    blue_idx = [g.faction_order.index("ussf"), g.faction_order.index("nexus_corp")]
+    red_idx = [g.faction_order.index("pla_ssf"), g.faction_order.index("russia_vks")]
+    for i in blue_idx:
+        assert r[i] == 1.0
+    for i in red_idx:
+        assert r[i] == -1.0
+
+
+def test_sda_filtering_deterministic():
+    g = make_game()
+    result1 = g._estimate_adversary_assets("ussf", "pla_ssf")
+    result2 = g._estimate_adversary_assets("ussf", "pla_ssf")
+    assert result1.leo_nodes == result2.leo_nodes
+    assert result1.asat_kinetic == result2.asat_kinetic
+
+
+def test_clone_isolation():
+    g = make_game()
+    clone = g.clone()
+    clone.faction_states["ussf"].assets.leo_nodes = 9999
+    assert g.faction_states["ussf"].assets.leo_nodes != 9999
+
+
+def test_clone_idempotent():
+    g = make_game()
+    _full_turn(g, invest_idx=5)
+    clone = g.clone()
+    assert clone.current_turn() == g.current_turn()
+    assert clone.current_phase() == g.current_phase()
+    assert clone.coalition_dominance == g.coalition_dominance

@@ -353,3 +353,22 @@ class CoreGame:
         # ── Step 11: check draw condition ─────────────────────────────────────
         if self._turn > self._total_turns and self._winner_coalition is None:
             self._draw = True
+
+    def _estimate_adversary_assets(self, observer_id: str, target_id: str) -> FactionAssets:
+        """Deterministic SDA-filtered estimate. No random — same state always gives same result."""
+        observer_fs = self.faction_states[observer_id]
+        target_fs = self.faction_states[target_id]
+        sda = observer_fs.sda_level()
+        a = target_fs.assets
+        return FactionAssets(
+            leo_nodes=int(a.leo_nodes * min(sda + 0.3, 1.0)),
+            meo_nodes=int(a.meo_nodes * min(sda + 0.2, 1.0)),
+            geo_nodes=int(a.geo_nodes * min(sda + 0.4, 1.0)),
+            cislunar_nodes=int(a.cislunar_nodes * sda),
+            asat_kinetic=int(a.asat_kinetic * sda) if sda >= 0.3 else 0,
+            asat_deniable=round(a.asat_deniable * (sda - 0.5)) if sda >= 0.6 else 0,
+            ew_jammers=int(a.ew_jammers * sda),
+        )
+
+    def clone(self) -> "CoreGame":
+        return copy.deepcopy(self)
