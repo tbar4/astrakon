@@ -88,6 +88,7 @@ def _make_referee(scenario: Scenario, agents: dict, state: GameState, audit: "Au
         debris_fields=state.debris_fields,
         escalation_rung=state.escalation_rung,
         pending_deniable_approaches=state.pending_deniable_approaches,
+        combat_events=state.combat_events,
     )
     return referee, audit
 
@@ -112,6 +113,7 @@ def _sync_state_from_referee(state: GameState, referee: GameReferee) -> None:
     state.debris_fields = mutable["debris_fields"]
     state.escalation_rung = mutable["escalation_rung"]
     state.pending_deniable_approaches = mutable["pending_deniable_approaches"]
+    state.combat_events = mutable.get("combat_events", [])
     state.access_windows = referee.sim.access_window_engine.compute(state.turn)
 
 
@@ -253,6 +255,7 @@ async def advance(
                     _sync_state_from_referee(state, referee)
 
                 elif state.current_phase == Phase.OPERATIONS:
+                    state.combat_events = []
                     await audit.initialize()
                     await referee.resolve_operations(state.turn, state.phase_decisions)
                     _sync_state_from_referee(state, referee)

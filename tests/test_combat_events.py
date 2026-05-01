@@ -120,3 +120,40 @@ async def test_combat_events_survive_load_mutable_state(scenario, agents, audit)
     referee2.load_mutable_state(**mutable)
     assert len(referee2._combat_events) == 1
     assert referee2._combat_events[0]["attacker_id"] == "ussf"
+
+
+@pytest.mark.asyncio
+async def test_runner_combat_events_cleared_at_operations(tmp_path):
+    """combat_events from previous turn persist through INVEST, cleared at OPERATIONS start."""
+    from api.runner import create_game, advance
+    from engine.state import Phase
+    from pathlib import Path as P
+    from scenarios.loader import load_scenario as ls
+
+    sid = "pacific_crossroads"
+    scenario = ls(P("scenarios/pacific_crossroads.yaml"))
+    human_fid = scenario.factions[0].faction_id
+    agent_config = [
+        {
+            "faction_id": f.faction_id,
+            "agent_type": "web" if f.faction_id == human_fid else "rule_based",
+            "use_advisor": False,
+        }
+        for f in scenario.factions
+    ]
+    state = await create_game(sid, agent_config, db_path=str(tmp_path / "s.db"))
+
+    # Manually inject a combat event into the saved state
+    from api.session import load_session, save_session
+    from engine.state import CombatEvent as CE
+    loaded = await load_session(state.session_id, db_path=str(tmp_path / "s.db"))
+    loaded.combat_events = [CE(
+        turn=0, attacker_id="ussf", target_faction_id="pla_ssf",
+        shell="leo", event_type="kinetic", nodes_destroyed=2, detail="test"
+    ).model_dump()]
+    await save_session(loaded, db_path=str(tmp_path / "s.db"))
+
+    # Advance to INVEST — combat_events field must be present
+    resp = await advance(state.session_id, db_path=str(tmp_path / "s.db"))
+    assert resp.state.combat_events is not None
+    assert isinstance(resp.state.combat_events, list)
