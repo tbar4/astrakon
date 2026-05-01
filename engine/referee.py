@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import Optional, TYPE_CHECKING
 from engine.state import (
     Phase, Decision, GameStateSnapshot, FactionState, FactionAssets,
-    CoalitionState, CrisisEvent
+    CoalitionState, CrisisEvent, CombatEvent
 )
 from engine.simulation import SimulationEngine
 from engine.events import CrisisEventLibrary
@@ -74,6 +74,7 @@ class GameReferee:
         self._current_turn: int = 0
         self._initial_dominance: dict[str, float] = {}
         self._initial_assets: dict[str, FactionAssets] = {}
+        self._combat_events: list[dict] = []
 
     def load_mutable_state(
         self,
@@ -92,6 +93,7 @@ class GameReferee:
         debris_fields: dict | None = None,
         escalation_rung: int = 0,
         pending_deniable_approaches: list | None = None,
+        combat_events: list | None = None,
     ) -> None:
         """Populate internal state from serialized game state (used by web runner)."""
         from engine.state import FactionState, CoalitionState, FactionAssets
@@ -115,6 +117,7 @@ class GameReferee:
         self._escalation_rung = escalation_rung
         self._pending_deniable_approaches = list(pending_deniable_approaches) if pending_deniable_approaches else []
         self._current_turn = current_turn
+        self._combat_events = list(combat_events) if combat_events else []
         if initial_assets:
             self._initial_assets = {
                 fid: FactionAssets.model_validate(a) if isinstance(a, dict) else a
@@ -142,6 +145,7 @@ class GameReferee:
             "escalation_rung": self._escalation_rung,
             "pending_deniable_approaches": list(self._pending_deniable_approaches),
             "current_turn": self._current_turn,
+            "combat_events": list(self._combat_events),
         }
 
     async def run(self) -> GameResult:
@@ -530,6 +534,18 @@ class GameReferee:
             f"[KINETIC] {attacker_fs.name} struck {target_fs.name} ({regime.upper()}): "
             f"{nodes_hit} nodes destroyed{suffix}"
         )
+        self._combat_events.append(CombatEvent(
+            turn=self._current_turn,
+            attacker_id=attacker_fid,
+            target_faction_id=target_fid,
+            shell=regime,
+            event_type="kinetic",
+            nodes_destroyed=nodes_hit,
+            detail=(
+                f"{attacker_fs.name} destroys {nodes_hit} "
+                f"{target_fs.name} nodes in {regime.upper()}"
+            ),
+        ).model_dump())
 
     def _resolve_retaliation(self, attacker_fid: str, target_fid: str):
         attacker_fs = self.faction_states.get(attacker_fid)
@@ -698,6 +714,15 @@ class GameReferee:
                                 self._event_sda_malus.get(target_fid, 0.0) + sda_malus
                             )
                         self._turn_log.append(f"{fs.name} EW jamming ops against {target_fs.name}")
+                        self._combat_events.append(CombatEvent(
+                            turn=self._current_turn,
+                            attacker_id=fid,
+                            target_faction_id=target_fid,
+                            shell="leo",
+                            event_type="ew_jamming",
+                            nodes_destroyed=0,
+                            detail=f"{fs.name} EW jamming ops against {target_fs.name}",
+                        ).model_dump())
                     else:
                         self._prev_turn_ops.append("gray_zone")
                         self._turn_log.append(
@@ -803,6 +828,18 @@ class GameReferee:
                 f"[DENIABLE] {attacker_fs.name} co-orbital op vs {target_fs.name}: "
                 f"{nodes_hit} nodes disrupted{suffix}"
             )
+            self._combat_events.append(CombatEvent(
+                turn=self._current_turn,
+                attacker_id=attacker_fid,
+                target_faction_id=target_fid,
+                shell="leo",
+                event_type="deniable",
+                nodes_destroyed=nodes_hit,
+                detail=(
+                    f"{attacker_fs.name} co-orbital op vs {target_fs.name}: "
+                    f"{nodes_hit} nodes disrupted"
+                ),
+            ).model_dump())
         for a in resolved:
             self._pending_deniable_approaches.remove(a)
 

@@ -32,3 +32,91 @@ def test_game_state_has_combat_events_field():
         coalition_states={}, human_faction_id="ussf",
     )
     assert state.combat_events == []
+
+
+from pathlib import Path
+from engine.referee import GameReferee
+from agents.rule_based import MahanianAgent
+from scenarios.loader import load_scenario
+from output.audit import AuditTrail
+
+
+@pytest.fixture
+def scenario():
+    return load_scenario(Path("scenarios/pacific_crossroads.yaml"))
+
+
+@pytest.fixture
+async def audit(tmp_path):
+    trail = AuditTrail(str(tmp_path / "test.db"))
+    await trail.initialize()
+    yield trail
+    await trail.close()
+
+
+@pytest.fixture
+def agents(scenario):
+    result = {}
+    for faction in scenario.factions:
+        agent = MahanianAgent()
+        agent.initialize(faction)
+        result[faction.faction_id] = agent
+    return result
+
+
+@pytest.mark.asyncio
+async def test_kinetic_approach_creates_combat_event(scenario, agents, audit):
+    """After resolving a kinetic approach, _combat_events has one entry."""
+    referee = GameReferee(scenario=scenario, agents=agents, audit=audit)
+    referee._pending_kinetic_approaches = [{
+        "attacker_fid": "ussf",
+        "target_fid": "pla_ssf",
+        "declared_turn": 1,
+        "approach_type": "kinetic",
+    }]
+    referee.faction_states["ussf"].assets.asat_kinetic = 3
+    referee.faction_states["pla_ssf"].assets.leo_nodes = 10
+    referee.resolve_pending_kinetics(turn=3)
+    assert len(referee._combat_events) == 1
+    ev = referee._combat_events[0]
+    assert ev["attacker_id"] == "ussf"
+    assert ev["target_faction_id"] == "pla_ssf"
+    assert ev["event_type"] == "kinetic"
+    assert ev["nodes_destroyed"] >= 0
+    assert ev["shell"] in ("leo", "meo", "geo", "cislunar")
+
+
+@pytest.mark.asyncio
+async def test_combat_events_in_dump_mutable_state(scenario, agents, audit):
+    """dump_mutable_state includes combat_events."""
+    referee = GameReferee(scenario=scenario, agents=agents, audit=audit)
+    referee._pending_kinetic_approaches = [{
+        "attacker_fid": "ussf",
+        "target_fid": "pla_ssf",
+        "declared_turn": 1,
+        "approach_type": "kinetic",
+    }]
+    referee.faction_states["ussf"].assets.asat_kinetic = 3
+    referee.faction_states["pla_ssf"].assets.leo_nodes = 10
+    referee.resolve_pending_kinetics(turn=3)
+    mutable = referee.dump_mutable_state()
+    assert "combat_events" in mutable
+    assert isinstance(mutable["combat_events"], list)
+    assert len(mutable["combat_events"]) == 1
+
+
+@pytest.mark.asyncio
+async def test_combat_events_survive_load_mutable_state(scenario, agents, audit):
+    """load_mutable_state restores combat_events."""
+    referee = GameReferee(scenario=scenario, agents=agents, audit=audit)
+    from engine.state import CombatEvent
+    referee._combat_events = [CombatEvent(
+        turn=1, attacker_id="ussf", target_faction_id="pla_ssf",
+        shell="leo", event_type="kinetic", nodes_destroyed=2, detail="test"
+    ).model_dump()]
+    mutable = referee.dump_mutable_state()
+
+    referee2 = GameReferee(scenario=scenario, agents=agents, audit=audit)
+    referee2.load_mutable_state(**mutable)
+    assert len(referee2._combat_events) == 1
+    assert referee2._combat_events[0]["attacker_id"] == "ussf"
