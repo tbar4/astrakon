@@ -279,4 +279,20 @@ class ISMCTSAgent(AgentInterface):
         return await agent.submit_decision(phase)
 
     async def get_recommendation(self, phase: Phase) -> Optional[Recommendation]:
-        return None  # Implemented in Task 4
+        if self._last_snapshot is None:
+            return None
+        decision = await self.submit_decision(phase)
+        asp_name = (
+            "invest" if phase == Phase.INVEST
+            else "ops" if phase == Phase.OPERATIONS
+            else "response"
+        )
+        return Recommendation(
+            phase=phase,
+            options=[],
+            top_recommendation=decision,
+            strategic_rationale=(
+                f"IS-MCTS ({self.n_simulations} simulations) recommends this "
+                f"{asp_name} allocation based on information-set search."
+            ),
+        )

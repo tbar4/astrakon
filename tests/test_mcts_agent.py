@@ -91,6 +91,21 @@ def test_ops_returns_cached_without_new_search():
     assert decision.operations is not None
 
 
+def test_get_recommendation_returns_recommendation():
+    agent = ISMCTSAgent(n_simulations=10)
+    agent.faction_id = "ussf"
+    agent._archetype = "mahanian"
+    agent._scenario_path = "scenarios/pacific_crossroads.yaml"
+    agent.receive_state(make_snapshot("ussf", turn=1))
+    rec = asyncio.get_event_loop().run_until_complete(
+        agent.get_recommendation(Phase.INVEST)
+    )
+    assert rec is not None
+    assert rec.phase == Phase.INVEST
+    assert rec.top_recommendation.investment is not None
+    assert len(rec.strategic_rationale) > 0
+
+
 def test_all_three_phases():
     for faction_id in ["ussf", "pla_ssf"]:
         agent = ISMCTSAgent(n_simulations=10)
