@@ -191,6 +191,7 @@ async def create_game(
 async def advance(
     session_id: str,
     decision: Optional[dict] = None,
+    operation_forecast: Optional[dict] = None,
     db_path: str = _SESSIONS_DB,
 ) -> GameStateResponse:
     state = await load_session(session_id, db_path=db_path)
@@ -232,6 +233,17 @@ async def advance(
             dec_payload[k] = v
         dec = Decision.model_validate(dec_payload)
         state.phase_decisions[state.human_faction_id] = dec.model_dump_json()
+        if operation_forecast and phase == Phase.OPERATIONS:
+            state.operation_forecasts.append({
+                "turn": state.turn,
+                "faction_id": state.human_faction_id,
+                "action_type": operation_forecast.get("action_type", ""),
+                "mission": operation_forecast.get("mission", ""),
+                "target_faction_id": operation_forecast.get("target_faction_id", ""),
+                "forecast": operation_forecast.get("forecast", {}),
+                "actual": None,
+                "pending": True,
+            })
         await save_session(state, db_path=db_path)
 
     # Drive turn loop until human input needed or game over
@@ -253,12 +265,15 @@ async def advance(
                     state.current_phase = Phase.OPERATIONS
                     referee.resolve_pending_kinetics(state.turn)
                     _sync_state_from_referee(state, referee)
+                    state.operation_forecasts = referee._reconcile_forecasts(state.operation_forecasts)
 
                 elif state.current_phase == Phase.OPERATIONS:
                     state.combat_events = []
                     await audit.initialize()
+                    referee._resolve_pending_deniables(state.turn)
                     await referee.resolve_operations(state.turn, state.phase_decisions)
                     _sync_state_from_referee(state, referee)
+                    state.operation_forecasts = referee._reconcile_forecasts(state.operation_forecasts)
                     state.phase_decisions = {}
                     # Generate events before RESPONSE
                     events = referee.generate_turn_events(state.turn)
@@ -281,6 +296,7 @@ async def advance(
                     crisis_events = [CrisisEvent.model_validate(e) for e in state.events]
                     await referee.resolve_response(state.turn, state.phase_decisions, crisis_events)
                     _sync_state_from_referee(state, referee)
+                    state.operation_forecasts = referee._reconcile_forecasts(state.operation_forecasts)
                     referee._update_faction_metrics()
                     _sync_state_from_referee(state, referee)
                     state.phase_decisions = {}

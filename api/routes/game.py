@@ -101,7 +101,11 @@ async def advance(session_id: str):
 async def decide(session_id: str, req: DecideRequest):
     try:
         decision = {"phase": req.phase, "decision": req.decision}
-        return await runner.advance(session_id, decision=decision)
+        return await runner.advance(
+            session_id,
+            decision=decision,
+            operation_forecast=req.operation_forecast,
+        )
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
 

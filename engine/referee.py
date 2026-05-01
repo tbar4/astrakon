@@ -851,6 +851,39 @@ class GameReferee:
         for a in resolved:
             self._pending_deniable_approaches.remove(a)
 
+    def _reconcile_forecasts(self, forecasts: list[dict]) -> list[dict]:
+        """Match pending forecasts to actual combat_events for the current turn."""
+        current_turn_events = [
+            e for e in self._combat_events if e["turn"] == self._current_turn
+        ]
+        for forecast in forecasts:
+            if not forecast.get("pending"):
+                continue
+            match = next(
+                (
+                    e for e in current_turn_events
+                    if e["attacker_id"] == forecast["faction_id"]
+                    and e["target_faction_id"] == forecast.get("target_faction_id")
+                ),
+                None,
+            )
+            if match:
+                forecast["actual"] = {
+                    "nodes_destroyed": match["nodes_destroyed"],
+                    "detected": match.get("detected", False),
+                    "attributed": match.get("attributed", False),
+                    "event_type": match["event_type"],
+                }
+                forecast["pending"] = False
+            elif (forecast.get("action_type"), forecast.get("mission")) != (
+                "task_assets",
+                "intercept",
+            ):
+                # Non-kinetic-intercept: finalize (actual=None means no combat occurred)
+                forecast["pending"] = False
+            # kinetic intercept with 2-turn transit stays pending until it fires
+        return forecasts
+
     async def _run_operations_phase(self, turn: int):
         self.resolve_pending_kinetics(turn)
         self._resolve_pending_deniables(turn)
