@@ -42,6 +42,7 @@ class GameState(BaseModel):
     )
     human_adversary_estimates: dict[str, dict] = Field(default_factory=dict) # human player's filtered view of adversaries
     pending_deniable_approaches: list[dict] = Field(default_factory=list)    # delayed deniable co-orbital ops
+    combat_events: list[dict] = Field(default_factory=list)
     token_totals: dict[str, dict] = Field(default_factory=dict)              # faction_id → cumulative token counts
 
 

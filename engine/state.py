@@ -192,3 +192,13 @@ class CrisisEvent(BaseModel):
     visibility: Literal["public", "private", "faction-only"] = "public"
     severity: float = 0.5
     parameters: dict[str, Any] = {}
+
+
+class CombatEvent(BaseModel):
+    turn: int
+    attacker_id: str
+    target_faction_id: str
+    shell: str           # 'leo' | 'meo' | 'geo' | 'cislunar'
+    event_type: str      # 'kinetic' | 'deniable' | 'ew_jamming' | 'gray_zone'
+    nodes_destroyed: int
+    detail: str
