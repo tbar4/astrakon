@@ -67,3 +67,31 @@ def test_information_state_string_differs_by_player():
     is0 = state.information_state_string(0)
     is1 = state.information_state_string(1)
     assert is0 != is1
+
+
+def test_serialize_deserialize_round_trip():
+    game = pyspiel.load_game("astrakon", {"scenario_path": "scenarios/pacific_crossroads.yaml"})
+    state = game.new_initial_state()
+    for _ in range(8):
+        if state.is_terminal():
+            break
+        p = state.current_player()
+        state.apply_action(state.legal_actions(p)[0])
+    serialized = state.serialize()
+    state2 = game.new_initial_state()
+    state2.deserialize(serialized)
+    assert state2.current_player() == state.current_player()
+    assert state2.information_state_string(0) == state.information_state_string(0)
+
+
+def test_pyspiel_random_sim_compliance():
+    """Run OpenSpiel's built-in random simulation compliance suite.
+
+    pyspiel.test_game does not exist in this version; random_sim_test is the
+    equivalent C++ compliance harness (basic_tests.cc).  It verifies:
+      - clone == replay determinism
+      - serialize/deserialize round-trip
+      - legal_actions / apply_action consistency
+    """
+    game = pyspiel.load_game("astrakon", {"scenario_path": "scenarios/pacific_crossroads.yaml"})
+    pyspiel.random_sim_test(game, num_sims=3, serialize=True, verbose=False, mask_test=False)

@@ -64,14 +64,14 @@ class AstrakonState(pyspiel.State):
 
     def current_player(self) -> int:
         if self._core.is_terminal():
-            return pyspiel.TERMINAL_PLAYER_ID
+            return pyspiel.PlayerId.TERMINAL
         return self._core.acting_faction_idx()
 
-    def legal_actions(self, player: int = -1) -> list[int]:
+    def _legal_actions(self, player: int) -> list[int]:
+        """Override the C++ virtual — called by the public legal_actions() wrapper."""
         if self._core.is_terminal():
             return []
-        idx = player if player >= 0 else self._core.acting_faction_idx()
-        return sorted(self._core.legal_actions(idx))
+        return sorted(self._core.legal_actions(player))
 
     def _apply_action(self, action: int) -> None:
         self._core.apply_action(self._core.acting_faction_idx(), action)
@@ -212,18 +212,29 @@ def _encode_information_state(core: CoreGame, player_idx: int) -> list[float]:
 
 
 class _AstrakonObserver:
-    """Required by OpenSpiel's make_py_observer protocol."""
+    """Required by OpenSpiel's make_py_observer protocol.
+
+    OpenSpiel's random_sim_test and related utilities expect:
+      - .tensor  — flat list/array of floats
+      - .dict    — dict of named tensor pieces (may be empty for custom games)
+      - .set_from(state, player) — populate tensor from state
+      - .string_from(state, player) -> str — human-readable observation
+    """
 
     def __init__(self, iig_obs_type, params, action_space: ActionSpace, scenario: Scenario):
         self._iig_obs_type = iig_obs_type
         self._action_space = action_space
+        self._tensor: list[float] = []
+        self.dict: dict = {}
 
     def set_from(self, state: AstrakonState, player: int) -> None:
         self._tensor = state.information_state_tensor(player)
+        # Expose tensor as a single named piece so callers iterating .dict work
+        self.dict = {"observation": self._tensor}
 
     def string_from(self, state: AstrakonState, player: int) -> str:
         return state.information_state_string(player)
 
     @property
     def tensor(self) -> list[float]:
-        return getattr(self, "_tensor", [])
+        return self._tensor

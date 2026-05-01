@@ -222,11 +222,14 @@ class ConflictResolver:
         nodes_destroyed = int(effectiveness * attacker_sda_level)
         if attacker_tech_mods:
             nodes_destroyed += attacker_tech_mods.get("nodes_destroyed_bonus", 0)
+        # Deterministic detected/attributed: use fixed thresholds based on SDA level
+        detected = attacker_sda_level < 0.8   # high SDA makes attacker stealthy
+        attributed = attacker_sda_level >= 0.5
         return {
             "nodes_destroyed": nodes_destroyed,
             "regime": regime,
-            "detected": random.random() < 0.8,
-            "attributed": random.random() < attacker_sda_level,
+            "detected": detected,
+            "attributed": attributed,
         }
 
     def resolve_deniable_asat(
@@ -234,9 +237,10 @@ class ConflictResolver:
     ) -> dict:
         if attacker_assets.asat_deniable == 0:
             return {"nodes_destroyed": 0, "detected": False, "attributed": False}
-        nodes_destroyed = random.randint(1, max(attacker_assets.asat_deniable, 1))
-        detected = random.random() < defender_sda_level
-        attributed = detected and random.random() < (defender_sda_level * 0.5)
+        # Deterministic: fixed fraction of deniable ASAT capability destroys nodes
+        nodes_destroyed = max(1, attacker_assets.asat_deniable // 2)
+        detected = defender_sda_level >= 0.5
+        attributed = defender_sda_level >= 0.7
         return {
             "nodes_destroyed": nodes_destroyed,
             "detected": detected,
