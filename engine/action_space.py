@@ -1,6 +1,6 @@
 # engine/action_space.py
 from __future__ import annotations
-from engine.state import InvestmentAllocation, OperationalAction, ResponseDecision, Phase
+from engine.state import InvestmentAllocation, Phase
 from scenarios.loader import Scenario
 
 
@@ -42,10 +42,8 @@ def _archetype_invest(archetype: str, urgency: str) -> InvestmentAllocation:
         "mahanian": MahanianAgent,
         "commercial_broker": CommercialBrokerAgent,
         "gray_zone": GrayZoneAgent,
-        "patient_dragon": GrayZoneAgent,
         "rogue_accelerationist": RogueAccelerationistAgent,
-        "iron_napoleon": RogueAccelerationistAgent,
-    }.get(archetype, MahanianAgent)
+    }[archetype]  # KeyError is fine — means _ARCHETYPES was misconfigured
     agent = cls()
     snap = _make_snap(urgency)
     return agent._invest(snap)
@@ -61,15 +59,14 @@ _URGENCIES = ["ahead", "normal", "urgent", "critical"]
 
 
 class ActionSpace:
-    INVEST_COUNT = 100
-    INVEST_OFFSET = 0
-
     def __init__(self, scenario: Scenario):
         self.faction_ids: list[str] = [f.faction_id for f in scenario.factions]
         self.faction_archetypes: dict[str, str] = {
             f.faction_id: f.archetype for f in scenario.factions
         }
         self.invest_portfolios: list[tuple[InvestmentAllocation, str]] = []
+        self.INVEST_COUNT = 100
+        self.INVEST_OFFSET = 0
         self._build_portfolios()
         self._build_ops()
         self._build_response()
