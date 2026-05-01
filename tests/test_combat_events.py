@@ -178,3 +178,31 @@ def test_combat_event_accepts_detected_attributed():
     d = ev.model_dump()
     assert d["detected"] is True
     assert d["attributed"] is True
+
+
+def test_game_state_has_operation_forecasts_field():
+    from engine.state import FactionState, Phase, FactionAssets
+    from api.models import GameState
+    fs = FactionState(
+        faction_id="ussf", name="USSF", budget_per_turn=10, current_budget=10,
+        assets=FactionAssets(), coalition_id="usa", coalition_loyalty=1.0, archetype="mahanian"
+    )
+    state = GameState(
+        session_id="s1", scenario_id="test", scenario_name="Test", turn=1, total_turns=5,
+        current_phase=Phase.INVEST, faction_states={"ussf": fs},
+        coalition_states={}, human_faction_id="ussf",
+    )
+    assert state.operation_forecasts == []
+
+
+def test_decide_request_accepts_operation_forecast():
+    from api.models import DecideRequest
+    req = DecideRequest(
+        phase="operations",
+        decision={"operations": []},
+        operation_forecast={"action_type": "task_assets", "forecast": {}},
+    )
+    assert req.operation_forecast is not None
+
+    req_no_forecast = DecideRequest(phase="operations", decision={})
+    assert req_no_forecast.operation_forecast is None
