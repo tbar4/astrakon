@@ -74,6 +74,16 @@ export interface TokenTotals {
   cache_creation_tokens: number
 }
 
+export interface CombatEvent {
+  turn: number
+  attacker_id: string
+  target_faction_id: string
+  shell: string
+  event_type: 'kinetic' | 'deniable' | 'ew_jamming' | 'gray_zone'
+  nodes_destroyed: number
+  detail: string
+}
+
 export interface GameState {
   session_id: string
   scenario_id: string
@@ -117,6 +127,7 @@ export interface GameState {
     ew_jammers: number; sda_sensors: number; relay_nodes: number; launch_capacity: number
   }>
   token_totals: Record<string, TokenTotals>
+  combat_events?: CombatEvent[]
 }
 
 export interface GameStateResponse {
