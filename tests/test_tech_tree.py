@@ -190,3 +190,24 @@ def test_all_19_nodes_defined():
 
 def test_trunk_ids_constant():
     assert set(TRUNK_IDS) == {"trunk_launch", "trunk_capacity", "trunk_budget"}
+
+
+def test_apply_passive_effects_jamming_radius(mahanian_state):
+    result = apply_passive_effects(mahanian_state, "jamming_radius")
+    assert result["extend_to_adjacent"] is False
+    mahanian_state.unlocked_techs = ["gz_jamming"]
+    result = apply_passive_effects(mahanian_state, "jamming_radius")
+    assert result["extend_to_adjacent"] is True
+
+
+def test_apply_passive_effects_rog_ascent_active(mahanian_state):
+    result = apply_passive_effects(mahanian_state, "rog_ascent_active")
+    assert result["same_turn_resolve"] is False
+    mahanian_state.unlocked_techs = ["rog_ascent"]
+    result = apply_passive_effects(mahanian_state, "rog_ascent_active")
+    assert result["same_turn_resolve"] is True
+
+
+def test_apply_passive_effects_unknown_context_raises(mahanian_state):
+    with pytest.raises(ValueError, match="Unknown tech effect context"):
+        apply_passive_effects(mahanian_state, "nonexistent_context")

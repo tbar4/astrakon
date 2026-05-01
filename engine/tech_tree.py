@@ -59,7 +59,7 @@ TECH_NODES: list[TechNode] = [
         id="mah_escalation", name="Escalation Response",
         desc="Gain +1 ASAT kinetic when targeted by kinetic strike (emergency procurement)",
         tier=3, cost=5, prereqs=["mah_strike"], archetype="mahanian",
-        effect_type="asat_kinetic", effect_params={"emergency_procurement": True},
+        effect_type="asat_kinetic", effect_params={},
     ),
     TechNode(
         id="mah_projection", name="Power Projection",
@@ -176,6 +176,10 @@ def get_available_nodes(faction_state: "FactionState", rd_points: int) -> list[T
     return result
 
 
+# NOTE: Two effect_types are handled directly in referee.py and have NO dispatcher case here:
+# - "deterrence" (mah_deterrence): _update_faction_metrics adds +15 deterrence score directly
+# - "rog_cascade_immunity" (rog_cascade): _resolve_kinetic_approach checks unlocked_techs directly
+# Calling apply_passive_effects with these context strings will raise ValueError (by design).
 def apply_passive_effects(faction_state: "FactionState", context: str) -> dict:
     """Return a modifier dict for the given context key."""
     unlocked = faction_state.unlocked_techs
@@ -187,6 +191,7 @@ def apply_passive_effects(faction_state: "FactionState", context: str) -> dict:
         return {"pts_multiplier": 1.25 if "mah_projection" in unlocked else 1.0}
 
     if context == "cis_deploy":
+        # mah_projection covers both geo and cis deployment (same 1.25× multiplier)
         return {"pts_multiplier": 1.25 if "mah_projection" in unlocked else 1.0}
 
     if context == "commercial_income":
