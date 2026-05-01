@@ -131,6 +131,9 @@ class FactionState(BaseModel):
     current_budget: int = Field(ge=0)
     assets: FactionAssets
     tech_tree: dict[str, int] = {}
+    archetype: Optional[str] = None
+    unlocked_techs: list[str] = []
+    rog_shock_used: bool = False
     coalition_id: Optional[str] = None
     coalition_loyalty: float = 0.5
     deferred_returns: list[dict[str, Any]] = []
