@@ -4,10 +4,13 @@ import aiosqlite
 from pathlib import Path
 from api.models import GameState
 
+# In-memory cache of loaded sessions. Avoids a DB round-trip on every advance() call
+# but is lost on server restart — SQLite is the durable store.
 _sessions: dict[str, GameState] = {}
 _DEFAULT_DB = "output/sessions.db"
 _db_initialized = False
-# Serialize all writes so concurrent AAR generations never race on the write lock.
+# Serializes all DB writes. Without this, concurrent AAR generation (two browser tabs,
+# or spectate + play) can interleave writes and corrupt the SQLite WAL.
 _write_lock = asyncio.Lock()
 
 
@@ -16,6 +19,7 @@ async def initialize_db(db_path: str = _DEFAULT_DB) -> None:
     global _db_initialized
     Path(db_path).parent.mkdir(parents=True, exist_ok=True)
     async with aiosqlite.connect(db_path, timeout=30) as db:
+        # WAL allows concurrent readers (spectate page) while a writer (game advance) holds the lock.
         await db.execute("PRAGMA journal_mode=WAL")
         await db.execute("""
             CREATE TABLE IF NOT EXISTS sessions (
@@ -78,7 +82,7 @@ async def list_aars(session_id: str, db_path: str = _DEFAULT_DB) -> list[dict]:
 
 
 async def save_session(state: GameState, db_path: str = _DEFAULT_DB) -> None:
-    _sessions[state.session_id] = state
+    _sessions[state.session_id] = state  # update cache immediately so callers see changes before DB flush
     async with _write_lock:
         Path(db_path).parent.mkdir(parents=True, exist_ok=True)
         async with aiosqlite.connect(db_path, timeout=30) as db:

@@ -9,6 +9,9 @@ class Phase(str, Enum):
     RESPONSE = "response"
 
 
+# Escalation ladder: rungs advance when kinetic/deniable actions are taken and
+# cannot decrease within a single game (only crisis-event responses can de-escalate).
+# Rung 4+ triggers debris generation; rung 5 can cascade to game-ending crisis.
 ESCALATION_RUNG_NAMES: dict[int, str] = {
     0: "Peacetime Competition",
     1: "Contested — EW/Jamming Active",
@@ -35,7 +38,12 @@ class FactionAssets(BaseModel):
         return self.leo_nodes + self.meo_nodes + self.geo_nodes + self.cislunar_nodes
 
     def weighted_orbital_nodes(self) -> float:
-        """Strategic value weight: cislunar=4×, GEO=3×, MEO=2×, LEO=1×."""
+        """Strategic value weight: cislunar=4×, GEO=3×, MEO=2×, LEO=1×.
+
+        Higher orbits are harder to contest, provide more persistent coverage, and cost
+        more to deny — so they contribute disproportionately to dominance scores.
+        These weights are the single tuning point for orbital balance across the whole game.
+        """
         return (
             self.leo_nodes * 1.0 +
             self.meo_nodes * 2.0 +
@@ -79,6 +87,7 @@ class InvestmentAllocation(BaseModel):
             raise ValueError("All investment allocations must be >= 0.0")
         t = self.total()
         if t > 1.001:
+            # 0.001 tolerance absorbs floating-point rounding from the frontend sliders
             raise ValueError(f"Investment allocations sum to {t:.3f}, must be <= 1.0")
         return self
 
@@ -165,7 +174,7 @@ class GameStateSnapshot(BaseModel):
     faction_id: str
     faction_state: FactionState
     ally_states: dict[str, FactionState]
-    adversary_estimates: dict[str, dict]  # faction_id → filtered FactionAssets dict
+    adversary_estimates: dict[str, dict]  # faction_id → SDA-filtered FactionAssets dict (not ground truth)
     coalition_states: dict[str, CoalitionState]
     available_actions: list[str]
     turn_log_summary: str = ""

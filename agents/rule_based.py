@@ -8,7 +8,14 @@ from engine.state import (
 
 
 def _situation(snap: Optional[GameStateSnapshot]) -> tuple[float, float, float, int, str]:
-    """(my_dom, threshold, dom_gap, turns_left, urgency)  — urgency: ahead/normal/urgent/critical."""
+    """(my_dom, threshold, dom_gap, turns_left, urgency)  — urgency: ahead/normal/urgent/critical.
+
+    Thresholds are tuned so agents shift to aggressive play when they cannot
+    close the gap through normal investment alone:
+      critical: >15% behind with ≤3 turns — winning through investment is mathematically unlikely
+      urgent:   >8% behind with ≤5 turns — must escalate ops tempo
+      ahead:    >5% above threshold — shift to asset protection and consolidation
+    """
     if snap is None:
         return 0.0, 0.65, 0.65, 99, "normal"
     fs = snap.faction_state
@@ -285,7 +292,8 @@ class RogueAccelerationistAgent(AgentInterface):
         fs = snap.faction_state
         adversaries = list(snap.adversary_estimates.keys())
 
-        # Rogue doctrine: strike when holding > 1 ASAT to preserve deterrent
+        # Strike only when holding > 1 ASAT — firing the last interceptor leaves no
+        # deterrent and makes the faction vulnerable to a counter-strike next turn.
         if adversaries and fs.assets.asat_kinetic > 1:
             return OperationalAction(
                 action_type="task_assets",

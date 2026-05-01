@@ -60,15 +60,15 @@ const BRANCH_NODES: Record<string, [[string, string], [string, string]]> = {
   rogue_accelerationist: [['rog_debris', 'rog_ascent'], ['rog_cascade', 'rog_shock']],
 }
 
-const NW = 108, NH = 36
-const TRUNK_Y = 70
-const T2_Y = 210
-const T3_Y = 345
-const HALF_GAP = 55
-const COL_X = [124, 338, 566, 793]
-const TRUNK_CX = [281, 458, 635]
-const SVG_W = 940
-const SVG_H = 440
+const NW = 136, NH = 40
+const TRUNK_Y = 75
+const T2_Y = 220
+const T3_Y = 360
+const HALF_GAP = 76          // must be > NW/2 (68) to avoid box overlap
+const COL_X = [150, 450, 750, 1050]
+const TRUNK_CX = [300, 600, 900]
+const SVG_W = 1200
+const SVG_H = 450
 
 function prereqsMet(node: NodeMeta, unlocked: string[]): boolean {
   const hasAnyTrunk = TRUNK_IDS.some(id => unlocked.includes(id))
@@ -82,10 +82,11 @@ function nodeColor(
   if (pending.includes(id)) return '#00d4ff'
   if (unlocked.includes(id)) return '#00ff88'
   const meta = NODE_BY_ID[id]
-  if (!meta || phase !== 'invest') return '#334155'
-  if (meta.archetype && meta.archetype !== humanArchetype) return '#334155'
-  if (!prereqsMet(meta, unlocked)) return '#334155'
-  if (rdPoints < meta.cost) return '#334155'
+  if (!meta) return '#7f8ea0'
+  if (phase !== 'invest') return '#7f8ea0'
+  if (meta.archetype && meta.archetype !== humanArchetype) return '#7f8ea0'
+  if (!prereqsMet(meta, unlocked)) return '#94a3b8'
+  if (rdPoints < meta.cost) return '#94a3b8'
   return '#f59e0b'
 }
 
@@ -120,11 +121,11 @@ function NodeBox({ id, cx, cy, phase, unlocked, pending, rdPoints, humanArchetyp
         />
       )}
       <text x={cx} y={cy - 5} textAnchor="middle" fill={color}
-        fontSize={8} fontFamily="Courier New" letterSpacing={1.2}>
+        fontSize={10} fontFamily="Courier New">
         {meta.name}
       </text>
       <text x={cx} y={cy + 10} textAnchor="middle"
-        fill={color} fillOpacity={0.75} fontSize={8} fontFamily="Courier New">
+        fill={color} fillOpacity={0.9} fontSize={10} fontFamily="Courier New">
         {label}
       </text>
     </g>
@@ -140,8 +141,8 @@ export default function TechTreePanel({
   const rdColor = rdPoints < 0 ? '#ff4499' : rdPoints === 0 ? '#f59e0b' : '#00d4ff'
 
   function lineColor(fromId: string): string {
-    if (unlocked.includes(fromId)) return '#00ff8866'
-    return '#33415566'
+    if (unlocked.includes(fromId)) return '#00ff8899'
+    return '#64748b99'
   }
 
   return (
@@ -172,14 +173,14 @@ export default function TechTreePanel({
           <line
             x1={COL_X[0]} y1={TRUNK_Y + NH / 2 + 8}
             x2={COL_X[3]} y2={TRUNK_Y + NH / 2 + 8}
-            stroke="#33415544" strokeWidth={1}
+            stroke="#64748b66" strokeWidth={1}
           />
 
           {COL_X.map(cx => (
             <line key={cx}
               x1={cx} y1={TRUNK_Y + NH / 2 + 8}
               x2={cx} y2={T2_Y - NH / 2 - 6}
-              stroke="#33415544" strokeWidth={1}
+              stroke="#64748b66" strokeWidth={1}
             />
           ))}
 
@@ -199,8 +200,8 @@ export default function TechTreePanel({
             return (
               <g key={arch}>
                 <text x={cx} y={T2_Y - NH / 2 - 14}
-                  textAnchor="middle" fill={isOwn ? '#64748b' : '#33415566'}
-                  fontSize={8} fontFamily="Courier New" letterSpacing={2}>
+                  textAnchor="middle" fill={isOwn ? '#cbd5e1' : '#7f8ea0'}
+                  fontSize={10} fontFamily="Courier New" letterSpacing={2}>
                   {ARCHETYPE_LABELS[arch]}
                 </text>
 
@@ -241,18 +242,18 @@ export default function TechTreePanel({
                 ) : (
                   <g>
                     <rect
-                      x={cx - 64} y={T2_Y - NH / 2}
-                      width={128} height={T3_Y - T2_Y + NH}
-                      fill="rgba(2,11,24,0.6)" stroke="#33415566" strokeWidth={1}
+                      x={cx - HALF_GAP - NW / 2 - 8} y={T2_Y - NH / 2}
+                      width={2 * (HALF_GAP + NW / 2) + 16} height={T3_Y - T2_Y + NH}
+                      fill="rgba(2,11,24,0.6)" stroke="#64748baa" strokeWidth={1}
                       strokeDasharray="4 3" rx={3}
                     />
                     <text x={cx} y={(T2_Y + T3_Y) / 2 - 8}
-                      textAnchor="middle" fill="#33415599" fontSize={9}
+                      textAnchor="middle" fill="#94a3b8" fontSize={11}
                       fontFamily="Courier New" letterSpacing={3}>
                       ◆ CLASSIFIED
                     </text>
                     <text x={cx} y={(T2_Y + T3_Y) / 2 + 8}
-                      textAnchor="middle" fill="#33415566" fontSize={7}
+                      textAnchor="middle" fill="#64748b" fontSize={9}
                       fontFamily="Courier New" letterSpacing={1}>
                       INTEL DENIED
                     </text>

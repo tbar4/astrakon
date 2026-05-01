@@ -16,8 +16,10 @@ class TechNode:
     desc: str
     tier: int           # 1 = trunk, 2 = branch T2, 3 = branch T3
     cost: int           # R&D points to unlock
-    prereqs: list[str]  # node IDs required; '_any_trunk' = any trunk node
-    archetype: str | None  # None = all factions; else specific archetype ID
+    # '_any_trunk' is a sentinel meaning "at least one of trunk_launch/trunk_capacity/trunk_budget
+    # must be unlocked". All T2 nodes use this — factions must invest in any trunk before branches.
+    prereqs: list[str]
+    archetype: str | None  # None = available to all factions; else locked to that archetype
     effect_type: str
     effect_params: dict = field(default_factory=dict)
 

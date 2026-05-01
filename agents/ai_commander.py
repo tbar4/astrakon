@@ -80,7 +80,10 @@ PHASE_TOOLS = {
     Phase.RESPONSE:   [RESPONSE_TOOL],
 }
 
-# Set True when we get a hard auth/billing error — stops all API calls for the process lifetime
+# Module-level flag shared across ALL AICommanderAgent instances in the process.
+# Once set (on auth or billing error), every subsequent call skips the API entirely
+# and falls back to rule-based play. Avoids hammering the API with guaranteed failures
+# and keeps the game playable when the key is invalid or credits are exhausted.
 _API_DISABLED = False
 
 _ARCHETYPE_FALLBACK: dict[str, str] = {
@@ -271,10 +274,16 @@ class AICommanderAgent(AgentInterface):
             system=[{
                 "type": "text",
                 "text": self._system_prompt,
+                # Cache the system prompt across the 3 calls per turn (invest/ops/response)
+                # and across turns for the same agent instance. The persona YAML and victory
+                # doctrine never change, so caching them saves ~800 input tokens per call.
                 "cache_control": {"type": "ephemeral"},
             }],
             messages=[{"role": "user", "content": user_message}],
             tools=PHASE_TOOLS[phase],
+            # "any" forces Claude to call a tool rather than reply with text —
+            # without this, Claude sometimes returns a prose answer and the
+            # tool_use block is missing, causing _build_decision to fall back.
             tool_choice={"type": "any"},
         )
         u = response.usage

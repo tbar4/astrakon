@@ -202,7 +202,9 @@ async def advance(
     scenario = _load_scenario(state.scenario_id)
     sim = SimulationEngine()
 
-    # Handle inter-turn: frontend called /advance after viewing summary
+    # awaiting_next_turn is set after RESPONSE resolves so the frontend can display
+    # TurnSummary before the next turn starts. The frontend calls /advance again (with
+    # no decision payload) to dismiss the summary and begin the new turn.
     if state.awaiting_next_turn:
         state.turn += 1
         state.turn_log = []
@@ -212,7 +214,9 @@ async def advance(
         _replenish_budgets(state, scenario)
         await save_session(state, db_path=db_path)
 
-    # Start turn 1 if new game
+    # turn=0 is the creation-time sentinel; first advance() call bootstraps to turn 1.
+    # This lets create_game() return a clean state without side-effects (no budget
+    # replenish or log entries until the player actually starts).
     if state.turn == 0:
         state.turn = 1
         state.turn_log = []

@@ -8,6 +8,7 @@ class InvestmentResult:
     immediate_assets: FactionAssets
     deferred_returns: list[dict]  # [{turn_due, category, amount, faction_id}]
     budget_spent: int
+    partial_invest_out: dict[str, int]  # remainder pts banked for next turn
 
 
 class InvestmentResolver:
@@ -27,10 +28,12 @@ class InvestmentResolver:
         self, faction_id: str, budget: int,
         allocation: InvestmentAllocation, turn: int,
         unlocked_techs: list[str] | None = None,
+        partial_invest: dict[str, int] | None = None,
     ) -> InvestmentResult:
         from engine.tech_tree import apply_passive_effects as _ape
         from engine.state import FactionState as _FS, FactionAssets as _FA
         unlocked_techs = unlocked_techs or []
+        partial_invest = partial_invest or {}
         _mock_fs = _FS(
             faction_id=faction_id, name="", budget_per_turn=0, current_budget=0,
             assets=_FA(), unlocked_techs=unlocked_techs,
@@ -46,40 +49,49 @@ class InvestmentResolver:
         asat_kinetic = 0
         asat_deniable = 0
         ew_jammers = 0
+        partial_out: dict[str, int] = {}
 
         if allocation.constellation > 0:
-            pts = int(budget * allocation.constellation)
+            pts = int(budget * allocation.constellation) + partial_invest.get("constellation", 0)
             cost_divisor = _ape(_mock_fs, "leo_deploy")["cost_divisor"]
             nodes = pts // cost_divisor
             leo_nodes += nodes
             spent += nodes * cost_divisor
+            partial_out["constellation"] = pts - nodes * cost_divisor
 
         if allocation.meo_deployment > 0:
-            pts = int(budget * allocation.meo_deployment)
+            pts = int(budget * allocation.meo_deployment) + partial_invest.get("meo_deployment", 0)
             nodes = pts // self.MEO_NODE_COST
             meo_nodes += nodes
             spent += nodes * self.MEO_NODE_COST
+            partial_out["meo_deployment"] = pts - nodes * self.MEO_NODE_COST
 
         if allocation.geo_deployment > 0:
-            pts = int(budget * allocation.geo_deployment)
+            pts = int(budget * allocation.geo_deployment) + partial_invest.get("geo_deployment", 0)
             pts = int(pts * _ape(_mock_fs, "geo_deploy")["pts_multiplier"])
             nodes = pts // self.GEO_NODE_COST
             geo_nodes += nodes
             spent += nodes * self.GEO_NODE_COST
+            partial_out["geo_deployment"] = pts - nodes * self.GEO_NODE_COST
 
         if allocation.cislunar_deployment > 0:
-            pts = int(budget * allocation.cislunar_deployment)
+            pts = int(budget * allocation.cislunar_deployment) + partial_invest.get("cislunar_deployment", 0)
             pts = int(pts * _ape(_mock_fs, "cis_deploy")["pts_multiplier"])
             nodes = pts // self.CISLUNAR_NODE_COST
             cislunar_nodes += nodes
             spent += nodes * self.CISLUNAR_NODE_COST
+            partial_out["cislunar_deployment"] = pts - nodes * self.CISLUNAR_NODE_COST
 
         if allocation.launch_capacity > 0:
-            pts = int(budget * allocation.launch_capacity)
+            pts = int(budget * allocation.launch_capacity) + partial_invest.get("launch_capacity", 0)
             capacity = pts // self.LAUNCH_CAPACITY_COST
             launch_capacity += capacity
             spent += capacity * self.LAUNCH_CAPACITY_COST
+            partial_out["launch_capacity"] = pts - capacity * self.LAUNCH_CAPACITY_COST
 
+        # r_and_d, education, and commercial are fully consumed each turn (no partial banking)
+        # because they produce deferred returns — the full allocated amount is committed to the
+        # future pipeline and would double-count if carried forward again next turn.
         if allocation.r_and_d > 0:
             pts = int(budget * allocation.r_and_d)
             deferred.append({
@@ -101,22 +113,25 @@ class InvestmentResolver:
             spent += pts
 
         if allocation.covert > 0:
-            pts = int(budget * allocation.covert)
+            pts = int(budget * allocation.covert) + partial_invest.get("covert", 0)
             asat = pts // self.ASAT_DENIABLE_COST
             asat_deniable += asat
             spent += asat * self.ASAT_DENIABLE_COST
+            partial_out["covert"] = pts - asat * self.ASAT_DENIABLE_COST
 
         if allocation.kinetic_weapons > 0:
-            pts = int(budget * allocation.kinetic_weapons)
+            pts = int(budget * allocation.kinetic_weapons) + partial_invest.get("kinetic_weapons", 0)
             asat = pts // self.ASAT_KINETIC_COST
             asat_kinetic += asat
             spent += asat * self.ASAT_KINETIC_COST
+            partial_out["kinetic_weapons"] = pts - asat * self.ASAT_KINETIC_COST
 
         if allocation.influence_ops > 0:
-            pts = int(budget * allocation.influence_ops)
+            pts = int(budget * allocation.influence_ops) + partial_invest.get("influence_ops", 0)
             jammers = pts // self.EW_JAMMER_COST
             ew_jammers += jammers
             spent += jammers * self.EW_JAMMER_COST
+            partial_out["influence_ops"] = pts - jammers * self.EW_JAMMER_COST
 
         if allocation.commercial > 0:
             pts = int(budget * allocation.commercial)
@@ -143,6 +158,7 @@ class InvestmentResolver:
             immediate_assets=immediate,
             deferred_returns=deferred,
             budget_spent=spent,
+            partial_invest_out=partial_out,
         )
 
 
