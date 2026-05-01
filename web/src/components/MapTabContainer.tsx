@@ -1,6 +1,6 @@
 // web/src/components/MapTabContainer.tsx
 import { useState } from 'react'
-import type { GameState, FactionState, FactionAssets } from '../types'
+import type { GameState, FactionState, FactionAssets, CombatEvent } from '../types'
 import type { TurnSnapshot } from '../store/gameStore'
 import DominanceStrip from './DominanceStrip'
 import OpsTab from './OpsTab'
@@ -35,6 +35,8 @@ interface Props {
   pendingTechUnlocks?: string[]
   onQueueTech?: (id: string) => void
   rdPoints?: number
+  combatEvents?: CombatEvent[]
+  arcOpacity?: number
 }
 
 const TAB_LABELS: { id: Tab; label: string }[] = [
@@ -51,6 +53,7 @@ export default function MapTabContainer({
   factionState, turn, totalTurns, tensionLevel, cumulativeAdded, cumulativeDestroyed, isJammed,
   targetingMode, lockedFaction, onFactionClick,
   pendingTechUnlocks = [], onQueueTech = () => {}, rdPoints = 0,
+  combatEvents, arcOpacity,
 }: Props) {
   const [activeTab, setActiveTab] = useState<Tab>('orbital')
   const [selectedShell, setSelectedShell] = useState<string | null>(null)
@@ -90,6 +93,8 @@ export default function MapTabContainer({
             targetingMode={targetingMode}
             lockedFaction={lockedFaction}
             onFactionClick={onFactionClick}
+            combatEvents={combatEvents}
+            arcOpacity={arcOpacity}
           />
         )}
         {activeTab === 'deltav' && (
