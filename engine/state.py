@@ -146,6 +146,7 @@ class FactionState(BaseModel):
     joint_force_effectiveness: float = 1.0
     maneuver_budget: float = 10.0       # delta-v pool; replenishes each turn
     cognitive_penalty: float = 0.0      # 0.0–1.0; degrades SDA and coordination
+    partial_invest: dict[str, int] = Field(default_factory=dict)  # banked remainder pts per category
 
     def sda_level(self) -> float:
         # 0.0–1.0 based on sensor count; 12 sensors = ~0.5, 24 = ~1.0
@@ -202,3 +203,5 @@ class CombatEvent(BaseModel):
     event_type: str      # 'kinetic' | 'deniable' | 'ew_jamming' | 'gray_zone'
     nodes_destroyed: int
     detail: str
+    detected: bool = False
+    attributed: bool = False

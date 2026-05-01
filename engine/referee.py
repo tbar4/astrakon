@@ -411,6 +411,7 @@ class GameReferee:
                     allocation=decision.investment,
                     turn=turn,
                     unlocked_techs=list(fs.unlocked_techs),
+                    partial_invest=dict(fs.partial_invest),
                 )
                 fs.assets.leo_nodes += result.immediate_assets.leo_nodes
                 fs.assets.meo_nodes += result.immediate_assets.meo_nodes
@@ -422,6 +423,7 @@ class GameReferee:
                     fs.assets.launch_capacity += result.immediate_assets.launch_capacity
                 fs.deferred_returns.extend(result.deferred_returns)
                 fs.current_budget = max(0, fs.current_budget - result.budget_spent)
+                fs.partial_invest = result.partial_invest_out
             # Process tech unlocks
             for node_id in decision.tech_unlocks:
                 fs = self.faction_states[fid]
@@ -545,6 +547,8 @@ class GameReferee:
                 f"{attacker_fs.name} destroys {nodes_hit} "
                 f"{target_fs.name} nodes in {regime.upper()}"
             ),
+            detected=detected,
+            attributed=attributed,
         ).model_dump())
 
     def _resolve_retaliation(self, attacker_fid: str, target_fid: str):
@@ -839,6 +843,8 @@ class GameReferee:
                     f"{attacker_fs.name} co-orbital op vs {target_fs.name}: "
                     f"{nodes_hit} nodes disrupted"
                 ),
+                detected=detected,
+                attributed=attributed,
             ).model_dump())
         for a in resolved:
             self._pending_deniable_approaches.remove(a)

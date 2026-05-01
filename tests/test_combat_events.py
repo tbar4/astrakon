@@ -157,3 +157,24 @@ async def test_runner_combat_events_cleared_at_operations(tmp_path):
     resp = await advance(state.session_id, db_path=str(tmp_path / "s.db"))
     assert resp.state.combat_events is not None
     assert isinstance(resp.state.combat_events, list)
+
+
+def test_combat_event_has_detected_attributed_defaults():
+    ev = CombatEvent(
+        turn=1, attacker_id="ussf", target_faction_id="pla_ssf",
+        shell="leo", event_type="kinetic", nodes_destroyed=3, detail="test",
+    )
+    assert ev.detected is False
+    assert ev.attributed is False
+
+
+def test_combat_event_accepts_detected_attributed():
+    ev = CombatEvent(
+        turn=1, attacker_id="ussf", target_faction_id="pla_ssf",
+        shell="leo", event_type="kinetic", nodes_destroyed=3, detail="test",
+        detected=True, attributed=True,
+    )
+    assert ev.detected is True
+    d = ev.model_dump()
+    assert d["detected"] is True
+    assert d["attributed"] is True
