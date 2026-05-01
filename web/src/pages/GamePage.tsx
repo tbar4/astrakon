@@ -133,7 +133,10 @@ export default function GamePage() {
     }
   }
 
-  async function handleDecision(decision: Record<string, unknown>) {
+  async function handleDecision(
+    decision: Record<string, unknown>,
+    forecast?: Record<string, unknown>,
+  ) {
     if (!sessionId || !gameState) return
     const prevHumanId = gameState.human_faction_id
     setLoading(true)
@@ -141,7 +144,7 @@ export default function GamePage() {
     setRecommendation(null)
     setRecommendationWarnings([])
     try {
-      const res = await decide(sessionId, gameState.current_phase as string, decision)
+      const res = await decide(sessionId, gameState.current_phase as string, decision, forecast)
       setGameState(res.state, res.coalition_dominance)
       // Hot-seat: detect player switch
       if (res.state.human_faction_id !== prevHumanId && !res.state.game_over && !res.state.awaiting_next_turn) {
@@ -362,7 +365,7 @@ export default function GamePage() {
               humanFactionId={gameState.human_faction_id}
               asatKinetic={fs.assets.asat_kinetic}
               sessionId={sessionId!}
-              onSubmit={(d) => handleDecision(d)}
+              onSubmit={(d, f) => handleDecision(d, f)}
               disabled={isLoading}
               mapTarget={pendingTarget}
               onClearMapTarget={() => setPendingTarget(null)}
