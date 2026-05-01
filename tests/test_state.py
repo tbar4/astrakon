@@ -83,3 +83,59 @@ def test_game_state_snapshot_has_debris_fields():
     assert snap.debris_fields == {}
     assert snap.access_windows == {"leo": True, "meo": True, "geo": True, "cislunar": True}
     assert snap.escalation_rung == 0
+
+
+def test_faction_state_has_archetype_field():
+    fs = FactionState(
+        faction_id="ussf", name="USSF",
+        budget_per_turn=100, current_budget=100,
+        archetype="mahanian",
+        assets=FactionAssets(),
+    )
+    assert fs.archetype == "mahanian"
+
+
+def test_faction_state_archetype_defaults_empty():
+    fs = FactionState(
+        faction_id="ussf", name="USSF",
+        budget_per_turn=100, current_budget=100,
+        assets=FactionAssets(),
+    )
+    assert fs.archetype is None
+
+
+def test_faction_state_has_unlocked_techs():
+    fs = FactionState(
+        faction_id="ussf", name="USSF",
+        budget_per_turn=100, current_budget=100,
+        assets=FactionAssets(),
+    )
+    assert fs.unlocked_techs == []
+
+
+def test_faction_state_has_rog_shock_used():
+    fs = FactionState(
+        faction_id="ussf", name="USSF",
+        budget_per_turn=100, current_budget=100,
+        assets=FactionAssets(),
+    )
+    assert fs.rog_shock_used is False
+
+
+def test_decision_has_tech_unlocks():
+    d = Decision(
+        phase=Phase.INVEST,
+        faction_id="ussf",
+        investment=InvestmentAllocation(constellation=1.0, rationale="test"),
+        tech_unlocks=["trunk_launch"],
+    )
+    assert d.tech_unlocks == ["trunk_launch"]
+
+
+def test_decision_tech_unlocks_defaults_empty():
+    d = Decision(
+        phase=Phase.INVEST,
+        faction_id="ussf",
+        investment=InvestmentAllocation(constellation=1.0, rationale="test"),
+    )
+    assert d.tech_unlocks == []

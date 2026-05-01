@@ -153,6 +153,7 @@ async def create_game(
             assets=f.starting_assets.model_copy(deep=True),
             coalition_id=f.coalition_id,
             coalition_loyalty=f.coalition_loyalty,
+            archetype=f.archetype,
         )
         for f in scenario.factions
     }
@@ -367,6 +368,7 @@ async def advance(
 
 
 def _replenish_budgets(state: GameState, scenario: Scenario) -> None:
+    from engine.tech_tree import apply_passive_effects
     for faction in scenario.factions:
         fs = state.faction_states.get(faction.faction_id)
         if not fs:
@@ -375,11 +377,17 @@ def _replenish_budgets(state: GameState, scenario: Scenario) -> None:
         cid = faction.coalition_id
         if cid and cid in scenario.coalitions and scenario.coalitions[cid].hegemony_pool:
             fs.current_budget = int(fs.current_budget * 1.1)
-        # Process deferred returns
         due = [r for r in fs.deferred_returns if r["turn_due"] <= state.turn]
         for r in due:
             if r["category"] == "r_and_d":
-                fs.tech_tree["r_and_d"] = fs.tech_tree.get("r_and_d", 0) + r["amount"] // 20
+                fs.tech_tree["r_and_d"] = fs.tech_tree.get("r_and_d", 0) + r["amount"] // 10
             elif r["category"] == "education":
                 fs.tech_tree["education"] = fs.tech_tree.get("education", 0) + r["amount"] // 30
+            elif r["category"] == "commercial_income":
+                fs.current_budget += r["amount"]
         fs.deferred_returns = [r for r in fs.deferred_returns if r["turn_due"] > state.turn]
+        # Education bonus: +1 budget/turn per education point
+        fs.current_budget += fs.tech_tree.get("education", 0)
+        # Passive tech budget bonuses
+        mods = apply_passive_effects(fs, "budget_replenish")
+        fs.current_budget += mods["budget_bonus"]

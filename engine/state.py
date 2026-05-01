@@ -105,6 +105,7 @@ class Decision(BaseModel):
     investment: Optional[InvestmentAllocation] = None
     operations: Optional[list[OperationalAction]] = None
     response: Optional[ResponseDecision] = None
+    tech_unlocks: list[str] = []
 
     @model_validator(mode="after")
     def validate_phase_payload(self) -> "Decision":
@@ -131,6 +132,9 @@ class FactionState(BaseModel):
     current_budget: int = Field(ge=0)
     assets: FactionAssets
     tech_tree: dict[str, int] = {}
+    archetype: Optional[str] = None
+    unlocked_techs: list[str] = []
+    rog_shock_used: bool = False
     coalition_id: Optional[str] = None
     coalition_loyalty: float = 0.5
     deferred_returns: list[dict[str, Any]] = []

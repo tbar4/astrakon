@@ -12,7 +12,10 @@ import InvestPanel from '../components/phase/InvestPanel'
 import OpsPanel from '../components/phase/OpsPanel'
 import ResponsePanel from '../components/phase/ResponsePanel'
 import DecisionLog from '../components/DecisionLog'
+import { NODE_META } from '../components/TechTreePanel'
 import type { Recommendation, GameState } from '../types'
+
+const TECH_NODE_COSTS = Object.fromEntries(NODE_META.map(n => [n.id, n.cost]))
 
 function sanitizeRecommendation(
   rec: Recommendation,
@@ -85,11 +88,15 @@ export default function GamePage() {
   const [showOverlay, setShowOverlay] = useState(false)
   const [pendingTarget, setPendingTarget] = useState<string | null>(null)
   const [recommendationWarnings, setRecommendationWarnings] = useState<string[]>([])
+  const [pendingTechUnlocks, setPendingTechUnlocks] = useState<string[]>([])
 
   useEffect(() => { if (isLoading) setShowOverlay(true) }, [isLoading])
 
   // Clear map target whenever the phase changes
   useEffect(() => { setPendingTarget(null) }, [gameState?.current_phase])
+
+  useEffect(() => { setPendingTechUnlocks([]) }, [gameState?.current_phase])
+  useEffect(() => { setPendingTechUnlocks([]) }, [gameState?.human_faction_id])
 
   useEffect(() => {
     if (!sessionId || !gameState) return
@@ -172,6 +179,12 @@ export default function GamePage() {
     void handleDecision(decision)
   }
 
+  function handleQueueTech(nodeId: string) {
+    setPendingTechUnlocks(prev =>
+      prev.includes(nodeId) ? prev.filter(id => id !== nodeId) : [...prev, nodeId]
+    )
+  }
+
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (isLoading) return
@@ -208,6 +221,11 @@ export default function GamePage() {
   const factionNames = snap?.faction_names ?? Object.fromEntries(
     Object.entries(gameState.faction_states).map(([fid, s]) => [fid, s.name])
   )
+
+  const pendingUnlockCost = pendingTechUnlocks.reduce(
+    (sum, id) => sum + (TECH_NODE_COSTS[id] ?? 0), 0
+  )
+  const rdPoints = (fs.tech_tree?.r_and_d ?? 0) - pendingUnlockCost
 
   const isJammed = (() => {
     const name = fs.name.toLowerCase()
@@ -285,6 +303,9 @@ export default function GamePage() {
             targetingMode={phase === 'operations' && !isLoading}
             lockedFaction={pendingTarget}
             onFactionClick={setPendingTarget}
+            pendingTechUnlocks={pendingTechUnlocks}
+            onQueueTech={handleQueueTech}
+            rdPoints={rdPoints}
           />
         </div>
 
@@ -315,7 +336,7 @@ export default function GamePage() {
           {phase === 'invest' && (
             <InvestPanel
               budget={fs.current_budget}
-              onSubmit={handleDecision}
+              onSubmit={(d) => handleDecision({ ...d, tech_unlocks: pendingTechUnlocks })}
               disabled={isLoading}
             />
           )}
