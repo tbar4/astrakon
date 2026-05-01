@@ -211,29 +211,34 @@ class GameReferee:
         ).display()
 
     def _replenish_budgets(self, turn: int):
+        from engine.tech_tree import apply_passive_effects
         for fs in self.faction_states.values():
             fs.current_budget = fs.budget_per_turn
-            # Coalition hegemony pool: +10% budget for members
             cid = fs.coalition_id
             if cid and cid in self.scenario.coalitions:
                 if self.scenario.coalitions[cid].hegemony_pool:
                     fs.current_budget = int(fs.current_budget * 1.1)
-            # Process deferred returns due this turn
             due = [r for r in fs.deferred_returns if r["turn_due"] <= turn]
             for r in due:
                 if r["category"] == "r_and_d":
                     tech_level = fs.tech_tree.get("r_and_d", 0)
-                    fs.tech_tree["r_and_d"] = tech_level + r["amount"] // 20
+                    fs.tech_tree["r_and_d"] = tech_level + r["amount"] // 10  # doubled from //20
                 elif r["category"] == "education":
                     edu_level = fs.tech_tree.get("education", 0)
                     fs.tech_tree["education"] = edu_level + r["amount"] // 30
+                elif r["category"] == "commercial_income":
+                    fs.current_budget += r["amount"]
                 else:
                     raise ValueError(f"Unknown deferred return category: {r['category']}")
             fs.deferred_returns = [r for r in fs.deferred_returns if r["turn_due"] > turn]
-        # Replenish maneuver budget each turn
+            # Education permanent bonus: +1 budget/turn per education point
+            fs.current_budget += fs.tech_tree.get("education", 0)
+            # Passive tech budget bonuses
+            mods = apply_passive_effects(fs, "budget_replenish")
+            fs.current_budget += mods["budget_bonus"]
+            fs.assets.launch_capacity += mods["launch_capacity_bonus"]
         for fs in self.faction_states.values():
             self.sim.maneuver_budget_engine.replenish(fs)
-        # Decay orbital debris each turn
         self._debris_fields = self.sim.debris_engine.decay(self._debris_fields)
 
     def _build_snapshot(
@@ -373,6 +378,8 @@ class GameReferee:
 
     async def resolve_investment(self, turn: int, decisions: dict) -> None:
         """Resolve investment decisions (dict values may be Decision objects or JSON strings)."""
+        from engine.tech_tree import TECH_NODES, _prereqs_met
+        _node_by_id = {n.id: n for n in TECH_NODES}
         # Apply debris disruption at start of invest phase
         self.faction_states, debris_log = self.sim.debris_engine.apply_debris_effects(
             self.faction_states, self._debris_fields
@@ -399,6 +406,36 @@ class GameReferee:
                     fs.assets.launch_capacity += result.immediate_assets.launch_capacity
                 fs.deferred_returns.extend(result.deferred_returns)
                 fs.current_budget = max(0, fs.current_budget - result.budget_spent)
+            # Process tech unlocks
+            for node_id in decision.tech_unlocks:
+                fs = self.faction_states[fid]
+                node = _node_by_id.get(node_id)
+                if node is None:
+                    continue
+                if node_id in fs.unlocked_techs:
+                    continue
+                if node.archetype is not None and node.archetype != fs.archetype:
+                    self._turn_log.append(
+                        f"[TECH] {fs.name} rejected unlock {node_id} — archetype mismatch"
+                    )
+                    continue
+                rd_available = fs.tech_tree.get("r_and_d", 0)
+                if rd_available < node.cost:
+                    self._turn_log.append(
+                        f"[TECH] {fs.name} rejected unlock {node_id} — insufficient R&D "
+                        f"({rd_available}/{node.cost} pts)"
+                    )
+                    continue
+                if not _prereqs_met(node, fs.unlocked_techs):
+                    self._turn_log.append(
+                        f"[TECH] {fs.name} rejected unlock {node_id} — prereqs not met"
+                    )
+                    continue
+                fs.tech_tree["r_and_d"] = rd_available - node.cost
+                fs.unlocked_techs.append(node_id)
+                self._turn_log.append(
+                    f"[TECH] {fs.name} unlocked {node.name} (−{node.cost} R&D pts)"
+                )
             await self.audit.write_decision(turn=turn, decision=decision)
 
     async def _run_investment_phase(self, turn: int):
@@ -406,6 +443,7 @@ class GameReferee:
         await self.resolve_investment(turn, decisions)
 
     def _resolve_kinetic_approach(self, approach: dict):
+        from engine.tech_tree import apply_passive_effects
         attacker_fid = approach["attacker_fid"]
         target_fid = approach["target_fid"]
         attacker_fs = self.faction_states.get(attacker_fid)
@@ -415,10 +453,13 @@ class GameReferee:
                 f"Kinetic approach toward {target_fid} aborted — no ASATs remaining"
             )
             return
+
+        attacker_mods = apply_passive_effects(attacker_fs, "asat_kinetic")
         result = self.sim.conflict_resolver.resolve_kinetic_asat(
             attacker_assets=attacker_fs.assets,
             target_assets=target_fs.assets,
             attacker_sda_level=attacker_fs.sda_level(),
+            attacker_tech_mods=attacker_mods,
         )
         regime = result.get("regime", "leo")
         nodes_hit = 0
@@ -435,18 +476,34 @@ class GameReferee:
             nodes_hit = min(result["nodes_destroyed"], target_fs.assets.cislunar_nodes)
             target_fs.assets.cislunar_nodes -= nodes_hit
 
-        attacker_fs.assets.asat_kinetic -= 1
-        if regime in ("leo", "meo", "geo", "cislunar"):
-            self._debris_fields = self.sim.debris_engine.add_debris(
-                self._debris_fields, regime,
-                self.sim.debris_engine.DEBRIS_PER_NODE_KINETIC * nodes_hit
+        # rog_shock: free strike (don't consume ASAT)
+        if attacker_mods["free_strike"]:
+            attacker_fs.rog_shock_used = True
+            self._turn_log.append(
+                f"[TECH] {attacker_fs.name} activated Shock Strike (free kinetic, weapon not consumed)"
             )
-        # Keep global debris_level as max of all shells for backward compat
+        else:
+            attacker_fs.assets.asat_kinetic -= 1
+
+        # Debris (rog_debris doubles multiplier)
+        if regime in ("leo", "meo", "geo", "cislunar"):
+            debris_amount = self.sim.debris_engine.DEBRIS_PER_NODE_KINETIC * nodes_hit
+            debris_amount *= attacker_mods["debris_multiplier"]
+            self._debris_fields = self.sim.debris_engine.add_debris(
+                self._debris_fields, regime, debris_amount
+            )
         self.debris_level = max(self._debris_fields.values()) if self._debris_fields else 0.0
-        # Raise escalation rung to at least 4 (kinetic strike)
         self._escalation_rung = max(self._escalation_rung, 4)
         self._prev_turn_ops.append("kinetic_strike")
         attacker_fs.disruption_score += nodes_hit * 5
+
+        # mah_escalation: target gains +1 ASAT kinetic (emergency procurement)
+        if "mah_escalation" in target_fs.unlocked_techs:
+            target_fs.assets.asat_kinetic += 1
+            self._turn_log.append(
+                f"[TECH] {target_fs.name} emergency procurement: +1 ASAT kinetic "
+                f"(Escalation Response)"
+            )
 
         detected = result["detected"]
         attributed = result["attributed"]
@@ -565,6 +622,7 @@ class GameReferee:
                                     "target_fid": target_fid,
                                     "declared_turn": turn,
                                     "approach_type": "kinetic",
+                                    "rog_ascent": "rog_ascent" in fs.unlocked_techs,
                                 })
                                 self._escalation_rung = max(self._escalation_rung, 3)
                                 self._turn_log.append(
@@ -593,6 +651,13 @@ class GameReferee:
                             )
 
                 elif op.action_type == "gray_zone" and is_adversary:
+                    from engine.tech_tree import apply_passive_effects
+                    # Apply coalition loyalty reduction (base 0.05, gz_influence → 0.15)
+                    loyalty_mods = apply_passive_effects(fs, "gray_zone_loyalty")
+                    if target_fs:
+                        target_fs.coalition_loyalty = max(
+                            0.0, target_fs.coalition_loyalty - loyalty_mods["loyalty_reduction"]
+                        )
                     if fs.assets.asat_deniable > 0:
                         # Queue as delayed approach (1-turn transit)
                         ok, dv_msg = self.sim.maneuver_budget_engine.spend(fs, "deniable_approach")
@@ -611,6 +676,8 @@ class GameReferee:
                             self._turn_log.append(f"{fs.name} gray-zone op aborted — {dv_msg}")
                     elif fs.assets.ew_jammers > 0:
                         self._prev_turn_ops.append("gray_zone")
+                        jamming_mods = apply_passive_effects(fs, "jamming_radius")
+                        sda_malus = 0.30 if jamming_mods["extend_to_adjacent"] else 0.15
                         self._turn_log.append(f"{fs.name} EW jamming ops against {target_fs.name}")
                     else:
                         self._prev_turn_ops.append("gray_zone")
@@ -772,6 +839,15 @@ class GameReferee:
                 if fs and fs.coalition_id:
                     fs.coalition_loyalty = min(1.0, fs.coalition_loyalty + 0.02)
 
+        # rog_ascent: resolve same-turn kinetic approaches at end of RESPONSE phase
+        rog_ascent_approaches = [
+            a for a in self._pending_kinetic_approaches
+            if a.get("rog_ascent") and a["declared_turn"] == turn
+        ]
+        for approach in rog_ascent_approaches:
+            self._resolve_kinetic_approach(approach)
+            self._pending_kinetic_approaches.remove(approach)
+
         self._turn_log_summary = self._build_turn_log_summary(turn)
         self._update_coalition_loyalty()
 
@@ -784,6 +860,7 @@ class GameReferee:
         await self.resolve_response(turn, decisions, events)
 
     def _update_faction_metrics(self):
+        from engine.tech_tree import apply_passive_effects
         all_assets = {fid: fs.assets for fid, fs in self.faction_states.items()}
         total_leo = sum(a.leo_nodes for a in all_assets.values())
 
@@ -794,9 +871,19 @@ class GameReferee:
                 fs.sda_level() * 50 +
                 (20.0 if fs.coalition_id else 0.0)
             )
+            # mah_deterrence: +15 deterrence score/turn
+            if "mah_deterrence" in fs.unlocked_techs:
+                fs.deterrence_score = min(100.0, fs.deterrence_score + 15)
 
-            # Market share: this faction's LEO nodes as fraction of total
-            fs.market_share = fs.assets.leo_nodes / total_leo if total_leo > 0 else 0.0
+            # Market share: this faction's LEO nodes as fraction of total (com_network includes MEO)
+            market_mods = apply_passive_effects(fs, "market_share")
+            if market_mods["include_meo"]:
+                total_meo = sum(a.meo_nodes for a in all_assets.values())
+                weighted = fs.assets.leo_nodes + fs.assets.meo_nodes * 2
+                total_weighted = total_leo + total_meo * 2
+                fs.market_share = weighted / total_weighted if total_weighted > 0 else 0.0
+            else:
+                fs.market_share = fs.assets.leo_nodes / total_leo if total_leo > 0 else 0.0
 
             # JFE: degrades with node loss vs initial position
             if fid in self._initial_assets:

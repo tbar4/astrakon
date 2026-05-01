@@ -232,3 +232,153 @@ async def test_low_loyalty_coordination_fails(scenario, agents, audit):
             ).model_dump_json()
     await referee.resolve_operations(turn=1, decisions=decisions)
     assert any("loyal" in e.lower() or "coordinat" in e.lower() for e in referee._turn_log)
+
+
+# ── New tech-tree tests ────────────────────────────────────────────────────────
+
+import asyncio
+from pathlib import Path
+from engine.state import FactionState, FactionAssets, InvestmentAllocation, Decision, Phase
+from engine.simulation import SimulationEngine
+
+
+@pytest.fixture
+def minimal_scenario():
+    from scenarios.loader import load_scenario
+    return load_scenario(Path("scenarios/pacific_crossroads.yaml"))
+
+
+@pytest.fixture
+def referee_with_audit(tmp_path, minimal_scenario):
+    import asyncio as _asyncio
+    from output.audit import AuditTrail
+    from engine.referee import GameReferee
+    from agents.rule_based import MahanianAgent
+
+    async def _make():
+        audit = AuditTrail(str(tmp_path / "ref_audit.db"))
+        await audit.initialize()
+        agents = {f.faction_id: MahanianAgent() for f in minimal_scenario.factions}
+        for f in minimal_scenario.factions:
+            agents[f.faction_id].initialize(f)
+        ref = GameReferee(scenario=minimal_scenario, agents=agents, audit=audit)
+        return ref, audit
+
+    return _asyncio.get_event_loop().run_until_complete(_make())
+
+
+def test_rd_yield_doubled(referee_with_audit):
+    ref, _ = referee_with_audit
+    fid = list(ref.faction_states.keys())[0]
+    fs = ref.faction_states[fid]
+    # Simulate a deferred r_and_d return of 30 pts
+    fs.deferred_returns = [{"faction_id": fid, "category": "r_and_d", "amount": 30, "turn_due": 1}]
+    ref._replenish_budgets(turn=1)
+    # With divisor 10: 30 // 10 = 3 pts
+    assert fs.tech_tree.get("r_and_d", 0) == 3
+
+
+def test_education_adds_budget(referee_with_audit):
+    ref, _ = referee_with_audit
+    fid = list(ref.faction_states.keys())[0]
+    fs = ref.faction_states[fid]
+    fs.tech_tree["education"] = 5  # 5 education pts
+    # First replenish to get base budget (before we check the education bonus)
+    ref._replenish_budgets(turn=1)
+    # Education bonus should add +5 to current_budget beyond the base
+    # (hegemony pool may or may not apply — just check that education pts were consumed as budget bonus)
+    assert fs.current_budget >= fs.budget_per_turn + 5  # at minimum base + education bonus
+
+
+@pytest.mark.asyncio
+async def test_tech_unlock_valid(tmp_path, minimal_scenario):
+    from output.audit import AuditTrail
+    from engine.referee import GameReferee
+    from agents.rule_based import MahanianAgent
+    audit = AuditTrail(str(tmp_path / "ref_tech.db"))
+    await audit.initialize()
+    agents = {f.faction_id: MahanianAgent() for f in minimal_scenario.factions}
+    for f in minimal_scenario.factions:
+        agents[f.faction_id].initialize(f)
+    ref = GameReferee(scenario=minimal_scenario, agents=agents, audit=audit)
+
+    fid = minimal_scenario.factions[0].faction_id
+    fs = ref.faction_states[fid]
+    fs.tech_tree["r_and_d"] = 10  # enough to unlock trunk_launch (cost 2)
+
+    decisions = {
+        fid: Decision(
+            phase=Phase.INVEST,
+            faction_id=fid,
+            investment=InvestmentAllocation(constellation=1.0, rationale="test"),
+            tech_unlocks=["trunk_launch"],
+        )
+        for fid in ref.faction_states
+    }
+    await ref.resolve_investment(turn=1, decisions=decisions)
+
+    assert "trunk_launch" in ref.faction_states[fid].unlocked_techs
+    assert ref.faction_states[fid].tech_tree.get("r_and_d", 0) == 8  # 10 - 2
+
+
+@pytest.mark.asyncio
+async def test_tech_unlock_insufficient_rd_rejected(tmp_path, minimal_scenario):
+    from output.audit import AuditTrail
+    from engine.referee import GameReferee
+    from agents.rule_based import MahanianAgent
+    audit = AuditTrail(str(tmp_path / "ref_tech2.db"))
+    await audit.initialize()
+    agents = {f.faction_id: MahanianAgent() for f in minimal_scenario.factions}
+    for f in minimal_scenario.factions:
+        agents[f.faction_id].initialize(f)
+    ref = GameReferee(scenario=minimal_scenario, agents=agents, audit=audit)
+
+    fid = minimal_scenario.factions[0].faction_id
+    fs = ref.faction_states[fid]
+    fs.tech_tree["r_and_d"] = 1  # NOT enough for trunk_launch (cost 2)
+
+    decisions = {
+        fid: Decision(
+            phase=Phase.INVEST,
+            faction_id=fid,
+            investment=InvestmentAllocation(constellation=1.0, rationale="test"),
+            tech_unlocks=["trunk_launch"],
+        )
+        for fid in ref.faction_states
+    }
+    await ref.resolve_investment(turn=1, decisions=decisions)
+
+    assert "trunk_launch" not in ref.faction_states[fid].unlocked_techs
+    assert ref.faction_states[fid].tech_tree.get("r_and_d", 0) == 1  # unchanged
+
+
+@pytest.mark.asyncio
+async def test_mah_escalation_adds_asat_when_struck(tmp_path, minimal_scenario):
+    from output.audit import AuditTrail
+    from engine.referee import GameReferee
+    from agents.rule_based import MahanianAgent
+    audit = AuditTrail(str(tmp_path / "ref_mah.db"))
+    await audit.initialize()
+    agents = {f.faction_id: MahanianAgent() for f in minimal_scenario.factions}
+    for f in minimal_scenario.factions:
+        agents[f.faction_id].initialize(f)
+    ref = GameReferee(scenario=minimal_scenario, agents=agents, audit=audit)
+
+    attacker_fid = minimal_scenario.factions[0].faction_id
+    target_fid = minimal_scenario.factions[1].faction_id
+    ref.faction_states[attacker_fid].assets.asat_kinetic = 2
+    ref.faction_states[attacker_fid].assets.leo_nodes = 5
+    # Give target mah_escalation
+    ref.faction_states[target_fid].unlocked_techs = ["mah_escalation"]
+    ref.faction_states[target_fid].assets.leo_nodes = 20
+    initial_asat = ref.faction_states[target_fid].assets.asat_kinetic
+
+    approach = {
+        "attacker_fid": attacker_fid,
+        "target_fid": target_fid,
+        "declared_turn": 1,
+        "approach_type": "kinetic",
+    }
+    ref._resolve_kinetic_approach(approach)
+    # mah_escalation should have added +1 to target's asat_kinetic
+    assert ref.faction_states[target_fid].assets.asat_kinetic == initial_asat + 1
