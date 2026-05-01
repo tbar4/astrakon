@@ -1,5 +1,6 @@
 # engine/action_space.py
 from __future__ import annotations
+import numpy as np
 from engine.state import InvestmentAllocation, Phase
 from scenarios.loader import Scenario
 
@@ -77,13 +78,37 @@ class ActionSpace:
         self.TOTAL_ACTIONS = self.INVEST_COUNT + self.OPS_COUNT + self.RESPONSE_COUNT
 
     def _build_portfolios(self) -> None:
-        # Slots 0-15: 4 archetypes × 4 urgency stances
+        # Slots 0-15: archetype × urgency
         for archetype in _ARCHETYPES:
             for urgency in _URGENCIES:
                 alloc = _archetype_invest(archetype, urgency)
                 name = f"{archetype}_{urgency}"
                 self.invest_portfolios.append((alloc, name))
-        # Slots 16-99 added in Task 3
+
+        # Slots 16-19: extremal options
+        extremals = [
+            (InvestmentAllocation(constellation=0.80, launch_capacity=0.20), "pure_orbital_leo"),
+            (InvestmentAllocation(geo_deployment=0.70, launch_capacity=0.30), "pure_orbital_geo"),
+            (InvestmentAllocation(kinetic_weapons=0.60, launch_capacity=0.40), "pure_kinetic"),
+            (InvestmentAllocation(covert=0.60, meo_deployment=0.20, launch_capacity=0.20), "pure_covert"),
+        ]
+        self.invest_portfolios.extend(extremals)
+
+        # Slots 20-99: random allocations via Dirichlet sampling (seed=42 for reproducibility)
+        rng = np.random.default_rng(seed=42)
+        fields = [
+            "r_and_d", "constellation", "meo_deployment", "geo_deployment",
+            "cislunar_deployment", "launch_capacity", "commercial",
+            "influence_ops", "education", "covert", "diplomacy", "kinetic_weapons",
+        ]
+        for idx in range(80):
+            raw = rng.dirichlet(np.ones(len(fields)))
+            scale = rng.uniform(0.5, 0.95)
+            values = (raw * scale).tolist()
+            alloc = InvestmentAllocation(**dict(zip(fields, values)))
+            self.invest_portfolios.append((alloc, f"invest_slot_{idx + 20:03d}"))
+
+        assert len(self.invest_portfolios) == 100
 
     def invest_portfolio_name(self, idx: int) -> str:
         return self.invest_portfolios[idx][1]
