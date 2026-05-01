@@ -93,20 +93,28 @@ class AstrakonState(pyspiel.State):
     def returns(self) -> list[float]:
         return self._core.returns()
 
-    def information_state_string(self, player: int) -> str:
+    def information_state_string(self, player: int | None = None) -> str:
+        if player is None:
+            player = self._core.acting_faction_idx()
         return self._core.information_state_string(player)
 
-    def information_state_tensor(self, player: int) -> list[float]:
+    def information_state_tensor(self, player: int | None = None) -> list[float]:
+        if player is None:
+            player = self._core.acting_faction_idx()
         return _encode_information_state(self._core, player)
 
-    def observation_string(self, player: int) -> str:
+    def observation_string(self, player: int | None = None) -> str:
+        if player is None:
+            player = self._core.acting_faction_idx()
         core = self._core
         return (
             f"T{core.current_turn()}/{core._total_turns}|ESC{core.escalation_rung}|"
             "COAL:" + ",".join(f"{c}={d:.3f}" for c, d in sorted(core.coalition_dominance.items()))
         )
 
-    def observation_tensor(self, player: int) -> list[float]:
+    def observation_tensor(self, player: int | None = None) -> list[float]:
+        if player is None:
+            player = self._core.acting_faction_idx()
         core = self._core
         result = []
         for _, d in sorted(core.coalition_dominance.items()):

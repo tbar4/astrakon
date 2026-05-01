@@ -51,3 +51,54 @@ def test_receive_state_clears_cache():
     agent.receive_state(make_snapshot())
     assert agent._cached_ops_action is None
     assert agent._cached_response_action is None
+
+
+def test_invest_decision_valid():
+    agent = ISMCTSAgent(n_simulations=20)
+    agent.faction_id = "ussf"
+    agent._archetype = "mahanian"
+    agent._scenario_path = "scenarios/pacific_crossroads.yaml"
+    agent.receive_state(make_snapshot("ussf", turn=1))
+    decision = asyncio.get_event_loop().run_until_complete(
+        agent.submit_decision(Phase.INVEST)
+    )
+    assert decision.phase == Phase.INVEST
+    assert decision.investment is not None
+    assert decision.investment.total() <= 1.001
+
+
+def test_invest_populates_ops_cache():
+    agent = ISMCTSAgent(n_simulations=20)
+    agent.faction_id = "ussf"
+    agent._archetype = "mahanian"
+    agent._scenario_path = "scenarios/pacific_crossroads.yaml"
+    agent.receive_state(make_snapshot("ussf", turn=1))
+    asyncio.get_event_loop().run_until_complete(agent.submit_decision(Phase.INVEST))
+    assert agent._cached_ops_action is not None
+    assert agent._cached_response_action is not None
+
+
+def test_ops_returns_cached_without_new_search():
+    agent = ISMCTSAgent(n_simulations=20)
+    agent.faction_id = "ussf"
+    agent._archetype = "mahanian"
+    agent._scenario_path = "scenarios/pacific_crossroads.yaml"
+    agent.receive_state(make_snapshot("ussf", turn=1))
+    asyncio.get_event_loop().run_until_complete(agent.submit_decision(Phase.INVEST))
+    agent.n_simulations = 0  # would fail if search runs again
+    decision = asyncio.get_event_loop().run_until_complete(agent.submit_decision(Phase.OPERATIONS))
+    assert decision.phase == Phase.OPERATIONS
+    assert decision.operations is not None
+
+
+def test_all_three_phases():
+    for faction_id in ["ussf", "pla_ssf"]:
+        agent = ISMCTSAgent(n_simulations=10)
+        agent.faction_id = faction_id
+        agent._archetype = "mahanian"
+        agent._scenario_path = "scenarios/pacific_crossroads.yaml"
+        snap = make_snapshot(faction_id, turn=1)
+        agent.receive_state(snap)
+        for phase in [Phase.INVEST, Phase.OPERATIONS, Phase.RESPONSE]:
+            d = asyncio.get_event_loop().run_until_complete(agent.submit_decision(phase))
+            assert d.phase == phase
