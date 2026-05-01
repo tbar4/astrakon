@@ -126,7 +126,7 @@ export default function ResponsePanel({ factionNames, humanFactionId, turnLogSum
       <button
         className="btn-primary"
         onClick={handleSubmit}
-        disabled={disabled || !rationale.trim()}
+        disabled={disabled}
         style={{ width: '100%' }}
       >
         [ SUBMIT RESPONSE ]

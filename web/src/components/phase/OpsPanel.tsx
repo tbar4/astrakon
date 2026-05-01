@@ -259,7 +259,7 @@ export default function OpsPanel({
       <button
         className="btn-primary"
         onClick={handleSubmit}
-        disabled={disabled || !rationale.trim()}
+        disabled={disabled}
         style={{ width: '100%' }}
       >
         [ EXECUTE OPERATION ]

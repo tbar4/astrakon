@@ -28,6 +28,8 @@ interface GameStore {
   isLoading: boolean
   error: string | null
   showSummary: boolean
+  // Keyed by faction_id so hot-seat players each get their own sticky allocation
+  lastInvestmentByFaction: Record<string, Record<string, number>>
 
   setSession: (sessionId: string, state: GameState, dominance: Record<string, number>) => void
   setGameState: (state: GameState, dominance: Record<string, number>) => void
@@ -35,6 +37,7 @@ interface GameStore {
   setLoading: (loading: boolean) => void
   setError: (error: string | null) => void
   setShowSummary: (show: boolean) => void
+  saveInvestment: (factionId: string, allocs: Record<string, number>) => void
   reset: () => void
 }
 
@@ -50,6 +53,7 @@ export const useGameStore = create<GameStore>((set) => ({
   isLoading: false,
   error: null,
   showSummary: false,
+  lastInvestmentByFaction: {},
 
   setSession: (sessionId, state, dominance) =>
     set({ sessionId, gameState: state, prevFactionStates: null, cumulativeAdded: {}, cumulativeDestroyed: {}, turnHistory: [], coalitionDominance: dominance }),
@@ -111,9 +115,12 @@ export const useGameStore = create<GameStore>((set) => ({
   setLoading: (loading) => set({ isLoading: loading }),
   setError: (error) => set({ error }),
   setShowSummary: (show) => set({ showSummary: show }),
+  saveInvestment: (factionId, allocs) =>
+    set((prev) => ({ lastInvestmentByFaction: { ...prev.lastInvestmentByFaction, [factionId]: allocs } })),
   reset: () => set({
     sessionId: null, gameState: null, prevFactionStates: null,
     cumulativeAdded: {}, cumulativeDestroyed: {}, turnHistory: [],
     coalitionDominance: {}, recommendation: null, isLoading: false, error: null, showSummary: false,
+    lastInvestmentByFaction: {},
   }),
 }))

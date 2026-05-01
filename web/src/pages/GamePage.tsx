@@ -17,6 +17,14 @@ import type { Recommendation, GameState } from '../types'
 
 const TECH_NODE_COSTS = Object.fromEntries(NODE_META.map(n => [n.id, n.cost]))
 
+// Default investment weights per archetype for turn 1 (fractions summing to 1.0)
+const ARCHETYPE_INVEST_DEFAULTS: Record<string, Record<string, number>> = {
+  mahanian:               { constellation: 0.15, meo_deployment: 0.20, geo_deployment: 0.15, kinetic_weapons: 0.25, r_and_d: 0.10, diplomacy: 0.10, launch_capacity: 0.05 },
+  commercial_broker:      { constellation: 0.15, meo_deployment: 0.10, commercial: 0.30, r_and_d: 0.15, diplomacy: 0.10, launch_capacity: 0.20 },
+  gray_zone:              { constellation: 0.10, covert: 0.35, influence_ops: 0.25, r_and_d: 0.15, diplomacy: 0.10, launch_capacity: 0.05 },
+  rogue_accelerationist:  { constellation: 0.15, kinetic_weapons: 0.40, covert: 0.15, r_and_d: 0.15, influence_ops: 0.05, launch_capacity: 0.10 },
+}
+
 function sanitizeRecommendation(
   rec: Recommendation,
   gameState: GameState,
@@ -80,7 +88,8 @@ export default function GamePage() {
     gameState, prevFactionStates, cumulativeAdded, cumulativeDestroyed,
     turnHistory, coalitionDominance, recommendation,
     isLoading, error, showSummary,
-    setGameState, setRecommendation, setLoading, setError, setShowSummary,
+    lastInvestmentByFaction,
+    setGameState, setRecommendation, setLoading, setError, setShowSummary, saveInvestment,
   } = useGameStore()
 
   const [showLog, setShowLog] = useState(false)
@@ -139,6 +148,11 @@ export default function GamePage() {
   ) {
     if (!sessionId || !gameState) return
     const prevHumanId = gameState.human_faction_id
+    // Persist invest allocations so sliders pre-fill next turn
+    if (gameState.current_phase === 'invest' && decision.investment) {
+      const { rationale: _r, ...allocs } = decision.investment as Record<string, unknown>
+      saveInvestment(gameState.human_faction_id, allocs as Record<string, number>)
+    }
     setLoading(true)
     setError(null)
     setRecommendation(null)
@@ -358,6 +372,10 @@ export default function GamePage() {
               budget={fs.current_budget}
               onSubmit={(d) => handleDecision({ ...d, tech_unlocks: pendingTechUnlocks })}
               disabled={isLoading}
+              defaultAllocation={
+                lastInvestmentByFaction[gameState.human_faction_id] ??
+                ARCHETYPE_INVEST_DEFAULTS[fs.archetype ?? '']
+              }
             />
           )}
           {phase === 'operations' && (

@@ -5,6 +5,7 @@ interface Props {
   budget: number
   onSubmit: (decision: Record<string, unknown>) => void
   disabled: boolean
+  defaultAllocation?: Partial<Record<string, number>>
 }
 
 const CATEGORIES = [
@@ -24,9 +25,11 @@ const CATEGORIES = [
 
 type CategoryKey = typeof CATEGORIES[number]['key']
 
-export default function InvestPanel({ budget, onSubmit, disabled }: Props) {
+export default function InvestPanel({ budget, onSubmit, disabled, defaultAllocation }: Props) {
   const [allocs, setAllocs] = useState<Record<CategoryKey, number>>(
-    Object.fromEntries(CATEGORIES.map((c) => [c.key, 0])) as Record<CategoryKey, number>
+    () => Object.fromEntries(
+      CATEGORIES.map((c) => [c.key, defaultAllocation?.[c.key] ?? 0])
+    ) as Record<CategoryKey, number>
   )
   const [rationale, setRationale] = useState('')
 
@@ -34,7 +37,7 @@ export default function InvestPanel({ budget, onSubmit, disabled }: Props) {
   const remaining = 1.0 - total
   const usedPts = Math.round(total * budget)
   const remainingPts = budget - usedPts
-  const isValid = total <= 1.001 && rationale.trim().length > 0
+  const isValid = total <= 1.001
 
   const preview = useMemo(() => {
     const p = (key: CategoryKey) => Math.floor(budget * allocs[key])
