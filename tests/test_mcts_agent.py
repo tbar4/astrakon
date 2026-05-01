@@ -159,3 +159,21 @@ def test_ismcts_beats_random_on_average():
             blue_wins += 1
 
     assert blue_wins >= 0  # sanity check — game produces valid results
+
+
+def test_alphazero_agent_loads_checkpoint(tmp_path):
+    from agents.alphazero_agent import AlphaZeroAgent
+    from training.network import PolicyValueNetwork
+    net = PolicyValueNetwork(input_dim=56, action_dim=136)  # actual game dims
+    ckpt = tmp_path / "test_step_0000001.pt"
+    net.save_checkpoint(ckpt, normalization_constants={}, scenario_name="pacific_crossroads")
+
+    agent = AlphaZeroAgent(checkpoint_path=ckpt, n_simulations=5)
+    agent.faction_id = "ussf"
+    agent._archetype = "mahanian"
+    agent._scenario_path = "scenarios/pacific_crossroads.yaml"
+    agent.receive_state(make_snapshot("ussf", turn=1))
+
+    decision = asyncio.get_event_loop().run_until_complete(agent.submit_decision(Phase.INVEST))
+    assert decision.phase == Phase.INVEST
+    assert decision.investment is not None
