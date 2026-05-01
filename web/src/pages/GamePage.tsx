@@ -89,6 +89,7 @@ export default function GamePage() {
   const [pendingTarget, setPendingTarget] = useState<string | null>(null)
   const [recommendationWarnings, setRecommendationWarnings] = useState<string[]>([])
   const [pendingTechUnlocks, setPendingTechUnlocks] = useState<string[]>([])
+  const [arcOpacity, setArcOpacity] = useState(0)
 
   useEffect(() => { if (isLoading) setShowOverlay(true) }, [isLoading])
 
@@ -97,6 +98,19 @@ export default function GamePage() {
 
   useEffect(() => { setPendingTechUnlocks([]) }, [gameState?.current_phase])
   useEffect(() => { setPendingTechUnlocks([]) }, [gameState?.human_faction_id])
+
+  useEffect(() => {
+    if (
+      gameState?.current_phase === 'invest' &&
+      !gameState.awaiting_next_turn &&
+      gameState.combat_events &&
+      gameState.combat_events.length > 0
+    ) {
+      setArcOpacity(1)
+      const fadeTimer = setTimeout(() => setArcOpacity(0), 8000)
+      return () => clearTimeout(fadeTimer)
+    }
+  }, [gameState?.turn, gameState?.current_phase, gameState?.awaiting_next_turn])
 
   useEffect(() => {
     if (!sessionId || !gameState) return
@@ -306,6 +320,8 @@ export default function GamePage() {
             pendingTechUnlocks={pendingTechUnlocks}
             onQueueTech={handleQueueTech}
             rdPoints={rdPoints}
+            combatEvents={gameState.combat_events}
+            arcOpacity={arcOpacity}
           />
         </div>
 
