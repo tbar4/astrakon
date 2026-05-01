@@ -4,13 +4,14 @@ import type { GameState, FactionState, FactionAssets, CombatEvent } from '../typ
 import type { TurnSnapshot } from '../store/gameStore'
 import DominanceStrip from './DominanceStrip'
 import OpsTab from './OpsTab'
-import AARPanel from './AARPanel'
 import HoloOrbitalMap from './HoloOrbitalMap'
 import DeltaVGraph from './DeltaVGraph'
 import TrendsTab from './TrendsTab'
 import TechTreePanel from './TechTreePanel'
+import ForecastTab from './ForecastTab'
+import type { OperationForecast } from '../types'
 
-type Tab = 'orbital' | 'deltav' | 'ops' | 'trends' | 'aar' | 'tech'
+type Tab = 'orbital' | 'deltav' | 'ops' | 'trends' | 'log' | 'tech' | 'forecast'
 
 interface Props {
   gameState: GameState
@@ -37,6 +38,7 @@ interface Props {
   rdPoints?: number
   combatEvents?: CombatEvent[]
   arcOpacity?: number
+  forecasts?: OperationForecast[]
 }
 
 const TAB_LABELS: { id: Tab; label: string }[] = [
@@ -44,8 +46,9 @@ const TAB_LABELS: { id: Tab; label: string }[] = [
   { id: 'deltav',  label: 'DELTA-V' },
   { id: 'ops',     label: 'OPS' },
   { id: 'trends',  label: 'TRENDS' },
-  { id: 'aar',     label: 'AAR' },
+  { id: 'log',     label: 'LOG' },
   { id: 'tech',    label: 'TECH' },
+  { id: 'forecast', label: 'FORECAST' },
 ]
 
 export default function MapTabContainer({
@@ -53,7 +56,7 @@ export default function MapTabContainer({
   factionState, turn, totalTurns, tensionLevel, cumulativeAdded, cumulativeDestroyed, isJammed,
   targetingMode, lockedFaction, onFactionClick,
   pendingTechUnlocks = [], onQueueTech = () => {}, rdPoints = 0,
-  combatEvents, arcOpacity,
+  combatEvents, arcOpacity, forecasts = [],
 }: Props) {
   const [activeTab, setActiveTab] = useState<Tab>('orbital')
   const [selectedShell, setSelectedShell] = useState<string | null>(null)
@@ -127,12 +130,29 @@ export default function MapTabContainer({
             turnHistory={turnHistory}
           />
         )}
-        {activeTab === 'aar' && (
-          <AARPanel
-            gameState={gameState}
-            coalitionDominance={coalitionDominance}
-            turnHistory={turnHistory}
-          />
+        {activeTab === 'log' && (
+          <div style={{ height: '100%', overflowY: 'auto', padding: '10px 14px' }}>
+            {gameState.turn_log.length === 0 ? (
+              <div className="mono" style={{ color: '#475569', fontSize: 10, textAlign: 'center', marginTop: 40, letterSpacing: 2 }}>
+                NO LOG ENTRIES THIS TURN
+              </div>
+            ) : (
+              gameState.turn_log.map((entry, i) => (
+                <div key={i} style={{
+                  fontFamily: 'Courier New', fontSize: 12, color: '#94a3b8',
+                  lineHeight: 1.7, padding: '4px 0',
+                  borderBottom: i < gameState.turn_log.length - 1 ? '1px solid #00d4ff0f' : 'none',
+                }}>
+                  <span style={{ color: '#475569', marginRight: 10, userSelect: 'none' }}>
+                    {String(i + 1).padStart(2, '0')}
+                  </span>
+                  <span style={{
+                    color: entry.startsWith('[') ? '#00d4ff' : '#94a3b8',
+                  }}>{entry}</span>
+                </div>
+              ))
+            )}
+          </div>
         )}
         {activeTab === 'tech' && (
           <TechTreePanel
@@ -142,6 +162,14 @@ export default function MapTabContainer({
             rdPoints={rdPoints}
             pendingUnlocks={pendingTechUnlocks}
             onQueueToggle={onQueueTech}
+          />
+        )}
+        {activeTab === 'forecast' && (
+          <ForecastTab
+            forecasts={forecasts}
+            factionNames={Object.fromEntries(
+              Object.entries(gameState.faction_states).map(([fid, fs]) => [fid, fs.name])
+            )}
           />
         )}
       </div>

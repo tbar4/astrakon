@@ -325,6 +325,7 @@ export default function GamePage() {
             rdPoints={rdPoints}
             combatEvents={gameState.combat_events}
             arcOpacity={arcOpacity}
+            forecasts={gameState.operation_forecasts ?? []}
           />
         </div>
 
