@@ -100,3 +100,76 @@ class CoreGame:
             fs = self.faction_states[fid]
             result.append(1.0 if fs.coalition_id == self._winner_coalition else -1.0)
         return result
+
+    def legal_actions(self, faction_idx: int) -> list[int]:
+        """Return all globally-indexed action indices legal at this state for faction_idx."""
+        if self.is_terminal():
+            return []
+        asp = self._action_space
+        fid = self.faction_order[faction_idx]
+        fs = self.faction_states[fid]
+
+        if self._phase == Phase.INVEST:
+            return list(range(asp.INVEST_COUNT))
+
+        if self._phase == Phase.OPERATIONS:
+            legal = []
+            for local_idx, entry in enumerate(asp.ops_actions):
+                global_idx = asp.OPS_OFFSET + local_idx
+                action_type = entry["action_type"]
+                mission = entry.get("mission", "")
+                # intercept requires kinetic ASAT
+                if mission == "intercept" and fs.assets.asat_kinetic == 0:
+                    continue
+                # gray_zone requires deniable ASAT or EW jammers
+                if action_type == "gray_zone" and fs.assets.asat_deniable == 0 and fs.assets.ew_jammers == 0:
+                    continue
+                legal.append(global_idx)
+            return legal
+
+        if self._phase == Phase.RESPONSE:
+            legal = []
+            for local_idx, entry in enumerate(asp.response_actions):
+                global_idx = asp.RESPONSE_OFFSET + local_idx
+                # retaliate requires deniable ASAT
+                if entry["retaliate"] and fs.assets.asat_deniable == 0:
+                    continue
+                legal.append(global_idx)
+            return legal
+
+        return []
+
+    def apply_action(self, faction_idx: int, action_idx: int) -> None:
+        """Apply one action for the current acting faction."""
+        if faction_idx != self._acting_faction_idx:
+            raise ValueError(
+                f"Expected faction_idx={self._acting_faction_idx}, got {faction_idx}"
+            )
+
+        if self._phase == Phase.INVEST:
+            self._invest_decisions[faction_idx] = action_idx
+        elif self._phase == Phase.OPERATIONS:
+            self._ops_decisions[faction_idx] = action_idx
+        elif self._phase == Phase.RESPONSE:
+            self._response_decisions[faction_idx] = action_idx
+
+        if faction_idx + 1 < len(self.faction_order):
+            self._acting_faction_idx += 1
+        else:
+            self._acting_faction_idx = 0
+            if self._phase == Phase.INVEST:
+                self._phase = Phase.OPERATIONS
+            elif self._phase == Phase.OPERATIONS:
+                self._phase = Phase.RESPONSE
+            elif self._phase == Phase.RESPONSE:
+                self._resolve_turn()
+
+    def _resolve_turn(self) -> None:
+        """Stub — filled in Task 8. Clears decisions, advances turn."""
+        self._invest_decisions = {}
+        self._ops_decisions = {}
+        self._response_decisions = {}
+        self._turn += 1
+        self._phase = Phase.INVEST
+        if self._turn > self._total_turns:
+            self._draw = True
