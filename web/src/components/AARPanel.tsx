@@ -16,7 +16,7 @@ export default function AARPanel({ gameState, coalitionDominance, turnHistory }:
           <div style={{ fontFamily: 'Courier New', fontSize: 10, color: '#00d4ff', letterSpacing: 2, marginBottom: 8 }}>
             ◆ AFTER ACTION REVIEW
           </div>
-          <div style={{ fontFamily: 'Courier New', fontSize: 9, color: '#334155' }}>
+          <div style={{ fontFamily: 'Courier New', fontSize: 9, color: '#64748b' }}>
             Game in progress. AAR available after final turn.
           </div>
         </div>
@@ -35,7 +35,7 @@ export default function AARPanel({ gameState, coalitionDominance, turnHistory }:
 
       {/* Winner banner */}
       <div style={{ textAlign: 'center', padding: '12px 0', borderBottom: '1px solid #00d4ff11' }}>
-        <div style={{ fontFamily: 'Courier New', fontSize: 9, color: '#334155', letterSpacing: 2, marginBottom: 4 }}>
+        <div style={{ fontFamily: 'Courier New', fontSize: 9, color: '#64748b', letterSpacing: 2, marginBottom: 4 }}>
           ◆ AFTER ACTION REVIEW
         </div>
         <div style={{ fontFamily: 'Courier New', fontSize: 18, color: winnerColor, letterSpacing: 4 }}>

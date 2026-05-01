@@ -1,5 +1,5 @@
 // web/src/components/HoloOrbitalMap.tsx
-import React, { useState, useMemo } from 'react'
+import React, { useState, useMemo, useEffect, useRef } from 'react'
 import type { GameState, FactionState } from '../types'
 
 export const TILT_FACTOR = 0.45
@@ -121,11 +121,11 @@ function dotsOnEllipse(
 
     elements.push(
       uncertain
-        ? <circle key={i} cx={cx} cy={cy} r={3}
-            fill="none" stroke="#475569" strokeWidth={1} strokeDasharray="1,1" opacity={0.4} />
-        : <circle key={i} cx={cx} cy={cy} r={3} fill={color}
+        ? <circle key={i} cx={cx} cy={cy} r={1.5}
+            fill="none" stroke="#475569" strokeWidth={0.8} strokeDasharray="1,1" opacity={0.4} />
+        : <circle key={i} cx={cx} cy={cy} r={1.5} fill={color}
             stroke={stroke} strokeWidth={strokeWidth} strokeDasharray={strokeDasharray}
-            style={{ filter: `drop-shadow(0 0 3px ${color})` }} />
+            style={{ filter: `drop-shadow(0 0 2px ${color})` }} />
     )
   }
 
@@ -149,8 +149,8 @@ function dotsOnEllipse(
 
   if (delta < 0) {
     const { x: cx, y: cy } = ellipsePoint(r, baseAngle)
-    elements.push(<circle key="destroyed-ring" cx={cx} cy={cy} r={6}
-      fill="none" stroke="#990000" strokeWidth={1.5} strokeDasharray="2 2" />)
+    elements.push(<circle key="destroyed-ring" cx={cx} cy={cy} r={4}
+      fill="none" stroke="#990000" strokeWidth={1.2} strokeDasharray="2 2" />)
   }
 
   return elements
@@ -168,16 +168,30 @@ interface Props {
   selectedFaction?: string | null
   onShellHover?: (shell: string | null) => void
   onFactionHover?: (faction: string | null) => void
+  targetingMode?: boolean
+  lockedFaction?: string | null
+  onFactionClick?: (factionId: string) => void
 }
 
 export default function HoloOrbitalMap({
   gameState, prevFactionStates, humanAdversaryEstimates,
   selectedShell, selectedFaction, onShellHover, onFactionHover,
+  targetingMode, lockedFaction, onFactionClick,
 }: Props) {
   const factions = useMemo(() => Object.entries(gameState.faction_states), [gameState.faction_states])
   const angleStep = (Math.PI * 2) / Math.max(factions.length, 1)
 
   const [hoveredCluster, setHoveredCluster] = useState<{ fid: string; ringIdx: number } | null>(null)
+
+  // Increment animEpoch each time the turn advances so burst animations replay
+  const [animEpoch, setAnimEpoch] = useState(0)
+  const prevTurnRef = useRef(gameState.turn)
+  useEffect(() => {
+    if (gameState.turn !== prevTurnRef.current) {
+      prevTurnRef.current = gameState.turn
+      setAnimEpoch((e) => e + 1)
+    }
+  }, [gameState.turn])
 
   function getNodeCount(fid: string, shell: 'leo_nodes' | 'meo_nodes' | 'geo_nodes' | 'cislunar_nodes') {
     const humanCoalition = Object.entries(gameState.coalition_states).find(([, cs]) =>
@@ -199,7 +213,7 @@ export default function HoloOrbitalMap({
   return (
     <div className="panel" style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
       <div className="panel-title">◆ ORBITAL MAP</div>
-      <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
+      <div style={{ flex: 1, position: 'relative', overflow: 'hidden', background: 'radial-gradient(ellipse at 50% 50%, #1a3a5c 0%, #040d1a 50%, #010508 100%)' }}>
         <svg viewBox="-45 55 350 210" preserveAspectRatio="xMidYMid meet"
           style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' }}>
 
@@ -360,11 +374,16 @@ export default function HoloOrbitalMap({
             factions.map(([fid], fidx) => {
               const { count, uncertain } = getNodeCount(fid, nodeKey)
               if (count === 0 && !uncertain) return null
-              const color = factionColor(fid, gameState)
+              const baseColor = factionColor(fid, gameState)
+              const isLocked = lockedFaction === fid
+              const isClickable = !!(targetingMode && fid !== gameState.human_faction_id)
+              const color = isLocked ? '#f59e0b' : baseColor
               const nd = computeNodeDelta(fid, nodeKey, gameState, prevFactionStates)
-              const dimmed = selectedFaction !== null && selectedFaction !== fid
+              const dimmed = selectedFaction !== null && selectedFaction !== fid && !isLocked
               return (
                 <g key={`${r}-${fid}`} opacity={dimmed ? 0.25 : 1}
+                  style={{ cursor: isClickable ? 'crosshair' : 'default' }}
+                  onClick={() => { if (isClickable) onFactionClick?.(fid) }}
                   onMouseEnter={() => {
                     setHoveredCluster({ fid, ringIdx })
                     onFactionHover?.(fid)
@@ -376,10 +395,54 @@ export default function HoloOrbitalMap({
                     onShellHover?.(null)
                   }}>
                   {dotsOnEllipse(count, r, color, fidx, factions.length, nd, uncertain)}
+                  {nd.delta !== 0 && prevFactionStates && (() => {
+                    const { x: fx, y: fy } = ellipsePoint(r, fidx * angleStep)
+                    const burstColor = nd.delta > 0 ? '#00ff88' : '#ff4499'
+                    const label = nd.delta > 0 ? `+${nd.delta}` : `${nd.delta}`
+                    return (
+                      <g key={animEpoch} pointerEvents="none">
+                        {/* Pulsing ring — 5 pulses over 10s, fades out */}
+                        <circle cx={fx} cy={fy} r={4} fill="none" stroke={burstColor} strokeWidth={1.5}>
+                          <animate attributeName="r"
+                            values="4;12;4;12;4;12;4;12;4;12;4"
+                            dur="10s" fill="freeze" />
+                          <animate attributeName="opacity"
+                            values="0.85;0.25;0.85;0.25;0.85;0.25;0.85;0.25;0.85;0.25;0"
+                            dur="10s" fill="freeze" />
+                        </circle>
+                        {/* Delta label that fades with the ring */}
+                        <text cx={fx} x={fx + 9} y={fy - 9} fill={burstColor}
+                          fontSize={7} fontFamily="monospace" textAnchor="start" opacity={0.9}>
+                          <animate attributeName="opacity" values="0.9;0.9;0.9;0.9;0.9;0.9;0.9;0.9;0.9;0.9;0" dur="10s" fill="freeze" />
+                          {label}
+                        </text>
+                      </g>
+                    )
+                  })()}
                 </g>
               )
             })
           )}
+
+          {/* Targeting reticle for locked faction */}
+          {targetingMode && lockedFaction && (() => {
+            const fidx = factions.findIndex(([f]) => f === lockedFaction)
+            if (fidx === -1) return null
+            const angle = fidx * angleStep
+            const { x: rx, y: ry } = ellipsePoint(48, angle)
+            return (
+              <g pointerEvents="none">
+                <circle cx={rx} cy={ry} r={5} fill="none" stroke="#f59e0b" strokeWidth={1.5} opacity={0.9}>
+                  <animate attributeName="r" values="4;9;4" dur="1.4s" repeatCount="indefinite" />
+                  <animate attributeName="opacity" values="0.9;0.2;0.9" dur="1.4s" repeatCount="indefinite" />
+                </circle>
+                <line x1={rx - 7} y1={ry} x2={rx - 3} y2={ry} stroke="#f59e0b" strokeWidth={1} opacity={0.7} />
+                <line x1={rx + 3} y1={ry} x2={rx + 7} y2={ry} stroke="#f59e0b" strokeWidth={1} opacity={0.7} />
+                <line x1={rx} y1={ry - 7} x2={rx} y2={ry - 3} stroke="#f59e0b" strokeWidth={1} opacity={0.7} />
+                <line x1={rx} y1={ry + 3} x2={rx} y2={ry + 7} stroke="#f59e0b" strokeWidth={1} opacity={0.7} />
+              </g>
+            )
+          })()}
 
           {/* Kinetic threat animation */}
           {(gameState.human_snapshot?.incoming_threats ?? []).length > 0 && (

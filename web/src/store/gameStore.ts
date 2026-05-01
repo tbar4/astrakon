@@ -12,6 +12,8 @@ export interface TurnSnapshot {
   turn: number
   dominance: Record<string, number>
   tension: number
+  shellTotals: { leo: number; meo: number; geo: number; cis: number }
+  factionTotals: Record<string, number>
 }
 
 interface GameStore {
@@ -61,12 +63,26 @@ export const useGameStore = create<GameStore>((set) => ({
       let turnHistory = prev.turnHistory
 
       if (isTurnBoundary && prev.gameState) {
-        // Snapshot the completed turn before overwriting
+        const allFs = Object.values(prev.gameState.faction_states)
+        const shellTotals = {
+          leo: allFs.reduce((s, f) => s + f.assets.leo_nodes, 0),
+          meo: allFs.reduce((s, f) => s + f.assets.meo_nodes, 0),
+          geo: allFs.reduce((s, f) => s + f.assets.geo_nodes, 0),
+          cis: allFs.reduce((s, f) => s + f.assets.cislunar_nodes, 0),
+        }
+        const factionTotals: Record<string, number> = {}
+        for (const [fid, fs] of Object.entries(prev.gameState.faction_states)) {
+          factionTotals[fid] = fs.assets.leo_nodes + fs.assets.meo_nodes + fs.assets.geo_nodes + fs.assets.cislunar_nodes
+        }
         turnHistory = [
           ...turnHistory,
-          { turn: prev.gameState.turn, dominance: prev.coalitionDominance, tension: prev.gameState.tension_level },
+          { turn: prev.gameState.turn, dominance: prev.coalitionDominance, tension: prev.gameState.tension_level, shellTotals, factionTotals },
         ]
+      }
 
+      // Track asset changes on every state update (investments happen mid-turn,
+      // so gating on isTurnBoundary would miss them entirely)
+      if (prev.gameState) {
         const humanId = prev.gameState.human_faction_id
         const prevFs = prev.gameState.faction_states[humanId]
         const currFs = state.faction_states[humanId]

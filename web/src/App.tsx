@@ -3,6 +3,7 @@ import SetupPage from './pages/SetupPage'
 import GamePage from './pages/GamePage'
 import ResultPage from './pages/ResultPage'
 import SpectatePage from './pages/SpectatePage'
+import FontScaleWidget from './components/FontScaleWidget'
 
 export default function App() {
   return (
@@ -14,6 +15,7 @@ export default function App() {
         <Route path="/result/:sessionId" element={<ResultPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
+      <FontScaleWidget />
     </BrowserRouter>
   )
 }

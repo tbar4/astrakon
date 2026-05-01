@@ -30,7 +30,7 @@ body {
 
 .panel-title {
   font-family: 'Courier New', monospace;
-  font-size: 10px;
+  font-size: 12px;
   letter-spacing: 3px;
   color: var(--color-accent);
   text-transform: uppercase;
@@ -43,7 +43,7 @@ body {
   color: var(--color-accent);
   padding: 8px 20px;
   font-family: 'Courier New', monospace;
-  font-size: 12px;
+  font-size: 13px;
   letter-spacing: 2px;
   cursor: pointer;
   border-radius: 2px;

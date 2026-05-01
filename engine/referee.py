@@ -291,6 +291,12 @@ class GameReferee:
                     "declared_turn": approach["declared_turn"],
                 })
 
+        all_assets_for_dom = {fid: fs.assets for fid, fs in self.faction_states.items()}
+        coalition_dominance = {
+            cid: self.sim.compute_coalition_dominance(coalition.member_ids, all_assets_for_dom)
+            for cid, coalition in self.coalition_states.items()
+        }
+
         return GameStateSnapshot(
             turn=self._current_turn,
             phase=phase,
@@ -309,6 +315,9 @@ class GameReferee:
             debris_fields=dict(self._debris_fields),
             escalation_rung=self._escalation_rung,
             access_windows=self.sim.access_window_engine.compute(self._current_turn),
+            total_turns=self.scenario.turns,
+            coalition_dominance=coalition_dominance,
+            victory_threshold=self.scenario.victory.coalition_orbital_dominance,
         )
 
     async def _fallback_decision(

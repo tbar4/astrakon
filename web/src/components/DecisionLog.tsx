@@ -88,7 +88,7 @@ export default function DecisionLog({ sessionId, scenarioName, onClose }: Props)
         display: 'flex', alignItems: 'center', gap: 16, flexShrink: 0, background: '#020b18',
       }}>
         <span className="mono" style={{ color: '#00d4ff', fontSize: 12, letterSpacing: 3 }}>◆ DECISION LOG</span>
-        <span className="mono" style={{ color: '#334155', fontSize: 10 }}>·</span>
+        <span className="mono" style={{ color: '#64748b', fontSize: 10 }}>·</span>
         <span className="mono" style={{ color: '#64748b', fontSize: 10 }}>{scenarioName}</span>
         <span style={{ flex: 1 }} />
         {data && (
@@ -113,7 +113,7 @@ export default function DecisionLog({ sessionId, scenarioName, onClose }: Props)
             <button key={t} onClick={() => setTab(t)} style={{
               background: 'none', border: 'none',
               borderBottom: tab === t ? '2px solid #00d4ff' : '2px solid transparent',
-              color: tab === t ? '#00d4ff' : '#334155',
+              color: tab === t ? '#00d4ff' : '#64748b',
               fontFamily: 'Courier New', fontSize: 10, letterSpacing: 2,
               padding: '8px 14px', cursor: 'pointer', marginBottom: -1,
             }}>{t}</button>
@@ -138,13 +138,13 @@ export default function DecisionLog({ sessionId, scenarioName, onClose }: Props)
 
       {/* Content */}
       <div style={{ flex: 1, overflowY: 'auto', padding: '16px 20px' }}>
-        {loading && <div className="mono" style={{ color: '#334155', fontSize: 11 }}>LOADING AUDIT DATA...</div>}
+        {loading && <div className="mono" style={{ color: '#64748b', fontSize: 11 }}>LOADING AUDIT DATA...</div>}
         {error && <div className="mono" style={{ color: '#ff4499', fontSize: 11 }}>{error}</div>}
 
         {/* DECISIONS tab */}
         {tab === 'DECISIONS' && data && (
           Object.keys(decisionsByTurn).length === 0
-            ? <div className="mono" style={{ color: '#334155', fontSize: 11, textAlign: 'center', marginTop: 40 }}>NO DECISIONS RECORDED</div>
+            ? <div className="mono" style={{ color: '#64748b', fontSize: 11, textAlign: 'center', marginTop: 40 }}>NO DECISIONS RECORDED</div>
             : Object.entries(decisionsByTurn)
                 .sort(([a], [b]) => Number(a) - Number(b))
                 .map(([turn, decisions]) => (
@@ -172,7 +172,7 @@ export default function DecisionLog({ sessionId, scenarioName, onClose }: Props)
         {/* EVENTS tab */}
         {tab === 'EVENTS' && data && (
           Object.keys(eventsByTurn).length === 0
-            ? <div className="mono" style={{ color: '#334155', fontSize: 11, textAlign: 'center', marginTop: 40 }}>NO EVENTS RECORDED</div>
+            ? <div className="mono" style={{ color: '#64748b', fontSize: 11, textAlign: 'center', marginTop: 40 }}>NO EVENTS RECORDED</div>
             : Object.entries(eventsByTurn)
                 .sort(([a], [b]) => Number(a) - Number(b))
                 .map(([turn, events]) => (
@@ -185,7 +185,7 @@ export default function DecisionLog({ sessionId, scenarioName, onClose }: Props)
                         <div style={{ display: 'flex', gap: 12, marginBottom: 4, alignItems: 'center' }}>
                           <span className="mono" style={{ fontSize: 10, color: '#f59e0b', letterSpacing: 1 }}>{severityBar(e.severity)} {e.event_type.toUpperCase()}</span>
                           <span style={{ flex: 1 }} />
-                          <span className="mono" style={{ fontSize: 9, color: '#334155' }}>triggered by {e.triggered_by}</span>
+                          <span className="mono" style={{ fontSize: 9, color: '#64748b' }}>triggered by {e.triggered_by}</span>
                         </div>
                         <div style={{ fontSize: 11, color: '#94a3b8' }}>{e.description}</div>
                       </div>
@@ -197,7 +197,7 @@ export default function DecisionLog({ sessionId, scenarioName, onClose }: Props)
         {/* DIVERGENCE tab */}
         {tab === 'DIVERGENCE' && data && (
           data.divergences.length === 0
-            ? <div className="mono" style={{ color: '#334155', fontSize: 11, textAlign: 'center', marginTop: 40 }}>NO ADVISOR DIVERGENCES RECORDED</div>
+            ? <div className="mono" style={{ color: '#64748b', fontSize: 11, textAlign: 'center', marginTop: 40 }}>NO ADVISOR DIVERGENCES RECORDED</div>
             : data.divergences.map((d) => (
                 <div key={d.id} style={{ marginBottom: 16, padding: '12px', background: 'rgba(245,158,11,0.03)', border: '1px solid #f59e0b11', borderRadius: 3 }}>
                   <div style={{ display: 'flex', gap: 12, marginBottom: 10, alignItems: 'center' }}>
@@ -225,13 +225,13 @@ export default function DecisionLog({ sessionId, scenarioName, onClose }: Props)
         {/* TOKENS tab */}
         {tab === 'TOKENS' && data && (
           data.token_summary.length === 0
-            ? <div className="mono" style={{ color: '#334155', fontSize: 11, textAlign: 'center', marginTop: 40 }}>NO TOKEN DATA RECORDED</div>
+            ? <div className="mono" style={{ color: '#64748b', fontSize: 11, textAlign: 'center', marginTop: 40 }}>NO TOKEN DATA RECORDED</div>
             : (
               <div className="panel">
                 <div className="panel-title">TOKEN USAGE BY FACTION</div>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 4rem 4rem 4rem 4rem', columnGap: 12, rowGap: 6 }}>
                   {['FACTION', 'ROLE', 'IN', 'OUT', 'CACHE-R', 'CACHE-W'].map((h) => (
-                    <div key={h} className="mono" style={{ fontSize: 9, color: '#334155', letterSpacing: 1, paddingBottom: 4, borderBottom: '1px solid #00d4ff11' }}>{h}</div>
+                    <div key={h} className="mono" style={{ fontSize: 9, color: '#64748b', letterSpacing: 1, paddingBottom: 4, borderBottom: '1px solid #00d4ff11' }}>{h}</div>
                   ))}
                   {data.token_summary.map((row, i) => (
                     <>

@@ -37,7 +37,7 @@ export default function ResponsePanel({ factionNames, humanFactionId, turnLogSum
       {turnLogSummary && (
         <div style={{
           background: '#0a0a14', border: '1px solid #00d4ff11',
-          padding: '8px 10px', fontSize: 10, color: '#475569',
+          padding: '8px 10px', fontSize: 12, color: '#475569',
           fontFamily: 'Courier New', marginBottom: 12, borderRadius: 2,
           whiteSpace: 'pre-line',
         }}>
@@ -54,8 +54,8 @@ export default function ResponsePanel({ factionNames, humanFactionId, turnLogSum
             style={{ accentColor: '#ff4499', width: 16, height: 16 }}
           />
           <div>
-            <div style={{ fontSize: 12, color: escalate ? '#ff4499' : '#94a3b8' }}>ESCALATE</div>
-            <div style={{ fontSize: 10, color: '#475569' }}>Raises tension +15% · unlocks harder actions next turn</div>
+            <div style={{ fontSize: 13, color: escalate ? '#ff4499' : '#94a3b8' }}>ESCALATE</div>
+            <div style={{ fontSize: 12, color: '#475569' }}>Raises tension +15% · unlocks harder actions next turn</div>
           </div>
         </label>
 
@@ -68,7 +68,7 @@ export default function ResponsePanel({ factionNames, humanFactionId, turnLogSum
                 disabled={disabled}
                 style={{ accentColor: '#ff4499', width: 14, height: 14 }}
               />
-              <span style={{ fontSize: 11, color: retaliate ? '#ff4499' : '#64748b' }}>Retaliate against faction</span>
+              <span style={{ fontSize: 13, color: retaliate ? '#ff4499' : '#64748b' }}>Retaliate against faction</span>
             </label>
             {retaliate && (
               <select
@@ -78,7 +78,7 @@ export default function ResponsePanel({ factionNames, humanFactionId, turnLogSum
                 style={{
                   width: '100%', background: '#020b18', border: '1px solid #ff449933',
                   color: '#94a3b8', padding: '6px 8px', fontFamily: 'Courier New',
-                  fontSize: 11, borderRadius: 2,
+                  fontSize: 13, borderRadius: 2,
                 }}
               >
                 <option value="">— select target —</option>
@@ -92,7 +92,7 @@ export default function ResponsePanel({ factionNames, humanFactionId, turnLogSum
       </div>
 
       <div style={{ marginBottom: 12 }}>
-        <div className="panel-title" style={{ fontSize: 9 }}>PUBLIC STATEMENT (optional)</div>
+        <div className="panel-title" style={{ fontSize: 11 }}>PUBLIC STATEMENT (optional)</div>
         <input
           type="text"
           value={statement}
@@ -102,13 +102,13 @@ export default function ResponsePanel({ factionNames, humanFactionId, turnLogSum
           style={{
             width: '100%', background: '#020b18', border: '1px solid #00d4ff22',
             color: '#94a3b8', padding: '6px 8px', fontFamily: 'system-ui',
-            fontSize: 12, borderRadius: 2, boxSizing: 'border-box',
+            fontSize: 13, borderRadius: 2, boxSizing: 'border-box',
           }}
         />
       </div>
 
       <div style={{ marginBottom: 12 }}>
-        <div className="panel-title" style={{ fontSize: 9 }}>RATIONALE</div>
+        <div className="panel-title" style={{ fontSize: 11 }}>RATIONALE</div>
         <textarea
           value={rationale}
           onChange={(e) => setRationale(e.target.value)}
@@ -117,7 +117,7 @@ export default function ResponsePanel({ factionNames, humanFactionId, turnLogSum
           style={{
             width: '100%', background: '#020b18', border: '1px solid #00d4ff22',
             color: '#94a3b8', padding: '6px 8px', fontFamily: 'system-ui',
-            fontSize: 12, resize: 'vertical', minHeight: 60, borderRadius: 2,
+            fontSize: 13, resize: 'vertical', minHeight: 60, borderRadius: 2,
             boxSizing: 'border-box',
           }}
         />

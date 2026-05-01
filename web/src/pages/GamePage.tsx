@@ -3,7 +3,6 @@ import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { advance, decide, getRecommendation } from '../api/client'
 import { useGameStore } from '../store/gameStore'
-import FactionSidebar from '../components/FactionSidebar'
 import MapTabContainer from '../components/MapTabContainer'
 import LoadingOverlay from '../components/LoadingOverlay'
 import AdvisorPanel from '../components/AdvisorPanel'
@@ -13,6 +12,63 @@ import InvestPanel from '../components/phase/InvestPanel'
 import OpsPanel from '../components/phase/OpsPanel'
 import ResponsePanel from '../components/phase/ResponsePanel'
 import DecisionLog from '../components/DecisionLog'
+import type { Recommendation, GameState } from '../types'
+
+function sanitizeRecommendation(
+  rec: Recommendation,
+  gameState: GameState,
+): { rec: Recommendation; warnings: string[] } {
+  const validIds = new Set(Object.keys(gameState.faction_states))
+  const factionNames = Object.fromEntries(
+    Object.entries(gameState.faction_states).map(([id, fs]) => [id, fs.name.toLowerCase()])
+  )
+  const warnings: string[] = []
+
+  function resolve(raw: string | undefined): string | undefined {
+    if (!raw) return raw
+    if (validIds.has(raw)) return raw
+
+    // Coalition ID → resolve to member if unambiguous
+    const coalition = gameState.coalition_states[raw]
+    if (coalition) {
+      const members = coalition.member_ids.filter(
+        id => id !== gameState.human_faction_id && validIds.has(id)
+      )
+      if (members.length === 1) {
+        warnings.push(`Target "${raw}" is a coalition name — resolved to ${gameState.faction_states[members[0]].name}`)
+        return members[0]
+      }
+      warnings.push(`Target "${raw}" is a coalition with ${members.length} members — target cleared (advisor must specify a faction)`)
+      return undefined
+    }
+
+    // Display name match (case-insensitive)
+    const match = Object.entries(factionNames).find(([, name]) => name === raw.toLowerCase())
+    if (match) {
+      warnings.push(`Target "${raw}" matched by display name — resolved to faction ID "${match[0]}"`)
+      return match[0]
+    }
+
+    warnings.push(`Target "${raw}" is not a valid faction ID — target cleared`)
+    return undefined
+  }
+
+  const sanitized: Recommendation = {
+    ...rec,
+    top_recommendation: {
+      ...rec.top_recommendation,
+      operations: rec.top_recommendation.operations?.map(op => ({
+        ...op,
+        target_faction: resolve(op.target_faction),
+      })),
+      response: rec.top_recommendation.response
+        ? { ...rec.top_recommendation.response, target_faction: resolve(rec.top_recommendation.response.target_faction) }
+        : undefined,
+    },
+  }
+
+  return { rec: sanitized, warnings }
+}
 
 export default function GamePage() {
   const { sessionId } = useParams<{ sessionId: string }>()
@@ -26,6 +82,14 @@ export default function GamePage() {
 
   const [showLog, setShowLog] = useState(false)
   const [handoff, setHandoff] = useState<{ toName: string } | null>(null)
+  const [showOverlay, setShowOverlay] = useState(false)
+  const [pendingTarget, setPendingTarget] = useState<string | null>(null)
+  const [recommendationWarnings, setRecommendationWarnings] = useState<string[]>([])
+
+  useEffect(() => { if (isLoading) setShowOverlay(true) }, [isLoading])
+
+  // Clear map target whenever the phase changes
+  useEffect(() => { setPendingTarget(null) }, [gameState?.current_phase])
 
   useEffect(() => {
     if (!sessionId || !gameState) return
@@ -37,10 +101,14 @@ export default function GamePage() {
   async function fetchRecommendation(phase: 'invest' | 'operations' | 'response') {
     if (!sessionId || !gameState?.use_advisor) return
     try {
-      const rec = await getRecommendation(sessionId, phase)
+      const raw = await getRecommendation(sessionId, phase)
+      if (!raw) { setRecommendation(null); setRecommendationWarnings([]); return }
+      const { rec, warnings } = sanitizeRecommendation(raw, gameState)
       setRecommendation(rec)
+      setRecommendationWarnings(warnings)
     } catch {
       setRecommendation(null)
+      setRecommendationWarnings([])
     }
   }
 
@@ -50,6 +118,7 @@ export default function GamePage() {
     setLoading(true)
     setError(null)
     setRecommendation(null)
+    setRecommendationWarnings([])
     try {
       const res = await decide(sessionId, gameState.current_phase as string, decision)
       setGameState(res.state, res.coalition_dominance)
@@ -154,16 +223,16 @@ export default function GamePage() {
         display: 'flex', alignItems: 'center', gap: 16, background: '#020b18', flexShrink: 0,
       }}>
         <span className="mono" style={{ color: '#00d4ff', fontSize: 13, letterSpacing: 4 }}>◆ ASTRAKON</span>
-        <span className="mono" style={{ color: '#334155', fontSize: 10 }}>·</span>
-        <span className="mono" style={{ color: '#64748b', fontSize: 10 }}>
+        <span className="mono" style={{ color: '#475569', fontSize: 12 }}>·</span>
+        <span className="mono" style={{ color: '#64748b', fontSize: 12 }}>
           TURN {gameState.turn}/{gameState.total_turns}
         </span>
-        <span className="mono" style={{ color: '#334155', fontSize: 10 }}>·</span>
-        <span className="mono" style={{ color: '#00d4ff88', fontSize: 10, letterSpacing: 2 }}>
+        <span className="mono" style={{ color: '#475569', fontSize: 12 }}>·</span>
+        <span className="mono" style={{ color: '#00d4ff88', fontSize: 12, letterSpacing: 2 }}>
           {phase.toUpperCase()} PHASE
         </span>
         <span style={{ flex: 1 }} />
-        <span className="mono" style={{ color: '#64748b', fontSize: 10 }}>{gameState.scenario_name}</span>
+        <span className="mono" style={{ color: '#64748b', fontSize: 11 }}>{gameState.scenario_name}</span>
         {Object.keys(gameState.token_totals ?? {}).length > 0 && (() => {
           const totals = gameState.token_totals ?? {}
           const totalIn = Object.values(totals).reduce((s, t) => s + (t.input_tokens ?? 0), 0)
@@ -171,25 +240,25 @@ export default function GamePage() {
           const total = totalIn + totalOut
           const fmt = total >= 1000 ? `${(total / 1000).toFixed(1)}K` : String(total)
           return (
-            <span className="mono" style={{ color: '#475569', fontSize: 9, letterSpacing: 1 }} title={`AI tokens: ${totalIn.toLocaleString()} in / ${totalOut.toLocaleString()} out`}>
+            <span className="mono" style={{ color: '#475569', fontSize: 11, letterSpacing: 1 }} title={`AI tokens: ${totalIn.toLocaleString()} in / ${totalOut.toLocaleString()} out`}>
               ⬡ {fmt} tok
             </span>
           )
         })()}
-        <span className="mono" style={{ color: '#1e3a4a', fontSize: 9, letterSpacing: 1 }}>
+        <span className="mono" style={{ color: '#64748b', fontSize: 11, letterSpacing: 1 }}>
           [A] ACCEPT · [D] DISMISS · [↵] CONTINUE · [L] LOG · [ESC] MENU
         </span>
         <button
           className="btn-primary"
           onClick={() => setShowLog((v) => !v)}
-          style={{ fontSize: 10, padding: '2px 10px', borderColor: '#334155', color: '#64748b' }}
+          style={{ fontSize: 11, padding: '2px 10px', borderColor: '#334155', color: '#64748b' }}
         >
           LOG
         </button>
         <button
           className="btn-primary"
           onClick={() => navigate('/')}
-          style={{ fontSize: 10, padding: '2px 10px', borderColor: '#334155', color: '#64748b' }}
+          style={{ fontSize: 11, padding: '2px 10px', borderColor: '#334155', color: '#64748b' }}
         >
           ← MENU
         </button>
@@ -199,47 +268,24 @@ export default function GamePage() {
       <div style={{ flex: 1, display: 'flex', gap: 8, padding: 8, overflow: 'hidden', minHeight: 0 }}>
 
         {/* LEFT PANEL */}
-        <div style={{ flex: 2, display: 'flex', flexDirection: 'column', gap: 8, minHeight: 0, overflow: 'hidden' }}>
-          {/* Top box: faction info */}
-          <div style={{ flex: '0 1 auto', maxHeight: '35%', minHeight: 0, overflow: 'hidden' }}>
-            <div style={{ overflowY: 'auto', height: '100%' }}>
-              <FactionSidebar
-                factionState={fs}
-                turn={gameState.turn}
-                totalTurns={gameState.total_turns}
-                tensionLevel={gameState.tension_level}
-                cumulativeAdded={cumulativeAdded}
-                cumulativeDestroyed={cumulativeDestroyed}
-                isJammed={isJammed}
-              />
-            </div>
-          </div>
-
-          {/* Center: map tab panel fills remaining space */}
-          <div style={{ flex: 1, minHeight: 0 }}>
-            <MapTabContainer
-              gameState={gameState}
-              coalitionDominance={coalitionDominance}
-              turnHistory={turnHistory}
-              prevFactionStates={prevFactionStates}
-              humanAdversaryEstimates={gameState.human_adversary_estimates ?? {}}
-            />
-          </div>
-
-          {/* Bottom box: ops log */}
-          <div className="panel" style={{ flex: '0 1 auto', maxHeight: '22%', overflowY: 'auto', minHeight: 0 }}>
-            <div className="panel-title">◆ OPS LOG</div>
-            {gameState.turn_log.slice(-10).map((entry, i) => {
-              const color = entry.includes('[KINETIC]') || entry.includes('[RETALIATION') ? '#ff4499'
-                : entry.includes('disrupted') || entry.includes('gray-zone') ? '#f59e0b'
-                : '#475569'
-              return (
-                <div key={i} style={{ fontSize: 10, color, marginBottom: 2, fontFamily: 'Courier New' }}>
-                  {entry}
-                </div>
-              )
-            })}
-          </div>
+        <div style={{ flex: 2, minHeight: 0, overflow: 'hidden' }}>
+          <MapTabContainer
+            gameState={gameState}
+            coalitionDominance={coalitionDominance}
+            turnHistory={turnHistory}
+            prevFactionStates={prevFactionStates}
+            humanAdversaryEstimates={gameState.human_adversary_estimates ?? {}}
+            factionState={fs}
+            turn={gameState.turn}
+            totalTurns={gameState.total_turns}
+            tensionLevel={gameState.tension_level}
+            cumulativeAdded={cumulativeAdded}
+            cumulativeDestroyed={cumulativeDestroyed}
+            isJammed={isJammed}
+            targetingMode={phase === 'operations' && !isLoading}
+            lockedFaction={pendingTarget}
+            onFactionClick={setPendingTarget}
+          />
         </div>
 
         {/* RIGHT PANEL: decision area only */}
@@ -260,8 +306,9 @@ export default function GamePage() {
             <AdvisorPanel
               recommendation={recommendation}
               phase={phase as 'invest' | 'operations' | 'response'}
+              warnings={recommendationWarnings}
               onAccept={handleAcceptAdvisor}
-              onDismiss={() => setRecommendation(null)}
+              onDismiss={() => { setRecommendation(null); setRecommendationWarnings([]) }}
             />
           )}
 
@@ -279,6 +326,8 @@ export default function GamePage() {
               asatKinetic={fs.assets.asat_kinetic}
               onSubmit={handleDecision}
               disabled={isLoading}
+              mapTarget={pendingTarget}
+              onClearMapTarget={() => setPendingTarget(null)}
             />
           )}
           {phase === 'response' && (
@@ -293,7 +342,7 @@ export default function GamePage() {
         </div>
       </div>
 
-      {isLoading && <LoadingOverlay />}
+      {showOverlay && <LoadingOverlay loading={isLoading} onDismiss={() => setShowOverlay(false)} />}
 
       {handoff && (
         <div style={{

@@ -1,17 +1,44 @@
 // web/src/pages/SetupPage.tsx
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import ReactMarkdown from 'react-markdown'
+import { LOADING_QUOTES } from '../data/loadingQuotes'
 import { useNavigate } from 'react-router-dom'
-import { listScenarios, listSessions, createGame, getState, advance, generateAar, listAars, getScenario, createScenario, updateScenario, deleteScenario } from '../api/client'
-import type { SavedAar, AarResult } from '../api/client'
+import { listScenarios, listSessions, createGame, getState, advance, generateAar, listAars, getScenario, createScenario, updateScenario, deleteScenario, getHistory } from '../api/client'
+import type { SavedAar, AarResult, HistoryData } from '../api/client'
 import { useGameStore } from '../store/gameStore'
 import type { ScenarioSummary, SessionSummary, AgentConfig, ScenarioDetail, ScenarioFactionDetail } from '../types'
 
-type Tab = 'NEW GAME' | 'SAVED GAMES' | 'AFTER ACTION REVIEWS' | 'SCENARIO EDITOR' | 'HOW TO PLAY'
+type Tab = 'NEW GAME' | 'SAVED GAMES' | 'AFTER ACTION REVIEWS' | 'SCENARIO EDITOR' | 'AGENT PROFILES' | 'DATABASE AUDITOR' | 'HOW TO PLAY' | 'READING LIST'
 
-const TABS: Tab[] = ['NEW GAME', 'SAVED GAMES', 'AFTER ACTION REVIEWS', 'SCENARIO EDITOR', 'HOW TO PLAY']
+const TABS: Tab[] = ['NEW GAME', 'SAVED GAMES', 'AFTER ACTION REVIEWS', 'SCENARIO EDITOR', 'AGENT PROFILES', 'DATABASE AUDITOR', 'HOW TO PLAY', 'READING LIST']
 
 const MONO: React.CSSProperties = { fontFamily: 'Courier New' }
+const ARCHETYPES = ['mahanian', 'commercial_broker', 'gray_zone', 'patient_dragon', 'rogue_accelerationist', 'iron_napoleon']
+
+const INVEST_KEYS = [
+  'r_and_d', 'constellation', 'meo_deployment', 'geo_deployment', 'cislunar_deployment',
+  'launch_capacity', 'commercial', 'influence_ops', 'education', 'covert', 'kinetic_weapons', 'diplomacy',
+] as const
+type InvestKey = typeof INVEST_KEYS[number]
+const URGENCY_STATES = ['normal', 'urgent', 'critical', 'ahead'] as const
+type UrgencyState = typeof URGENCY_STATES[number]
+
+interface CustomProfile {
+  id: string
+  name: string
+  description: string
+  base_archetype: string
+  invest_weights: Record<UrgencyState, Partial<Record<InvestKey, number>>>
+}
+
+const PROFILES_KEY = 'astrakon_agent_profiles'
+
+function loadProfiles(): CustomProfile[] {
+  try { return JSON.parse(localStorage.getItem(PROFILES_KEY) ?? '[]') } catch { return [] }
+}
+function saveProfiles(profiles: CustomProfile[]): void {
+  localStorage.setItem(PROFILES_KEY, JSON.stringify(profiles))
+}
 
 // ── Tab bar ──────────────────────────────────────────────────────────────────
 function TabBar({ active, onChange }: { active: Tab; onChange: (t: Tab) => void }) {
@@ -20,8 +47,8 @@ function TabBar({ active, onChange }: { active: Tab; onChange: (t: Tab) => void 
       {TABS.map((t) => (
         <button key={t} onClick={() => onChange(t)} style={{
           background: 'none', border: 'none', borderBottom: active === t ? '2px solid #00d4ff' : '2px solid transparent',
-          color: active === t ? '#00d4ff' : '#334155',
-          fontFamily: 'Courier New', fontSize: 10, letterSpacing: 2, padding: '8px 18px',
+          color: active === t ? '#00d4ff' : '#64748b',
+          fontFamily: 'Courier New', fontSize: 12, letterSpacing: 2, padding: '8px 18px',
           cursor: 'pointer', marginBottom: -1, transition: 'color 0.2s',
         }}>
           {t}
@@ -67,6 +94,21 @@ function NewGameTab() {
 
   function setUseAdvisor(factionId: string, use: boolean) {
     setAgentConfig((prev) => prev.map((c) => c.faction_id === factionId ? { ...c, use_advisor: use } : c))
+  }
+
+  function setArchetypeOverride(factionId: string, value: string) {
+    if (value.startsWith('custom:')) {
+      const profile = loadProfiles().find((p) => p.id === value.slice(7))
+      setAgentConfig((prev) => prev.map((c) => c.faction_id === factionId ? {
+        ...c,
+        archetype_override: profile?.base_archetype,
+        custom_invest_weights: profile?.invest_weights as Record<string, Record<string, number>>,
+      } : c))
+    } else {
+      setAgentConfig((prev) => prev.map((c) => c.faction_id === factionId ? {
+        ...c, archetype_override: value || undefined, custom_invest_weights: undefined,
+      } : c))
+    }
   }
 
   async function handleStart() {
@@ -134,20 +176,61 @@ function NewGameTab() {
             const cfg = agentConfig.find((c) => c.faction_id === f.faction_id)
             if (!cfg) return null
             return (
-              <div key={f.faction_id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 0', borderBottom: '1px solid #00d4ff11' }}>
-                <div style={{ flex: 1, fontSize: 12, color: '#e2e8f0' }}>{f.name}</div>
-                <select value={cfg.agent_type} onChange={(e) => setAgentType(f.faction_id, e.target.value as AgentConfig['agent_type'])}
-                  style={{ background: '#020b18', border: '1px solid #00d4ff33', color: '#94a3b8', padding: '4px 8px', fontFamily: 'Courier New', fontSize: 11, borderRadius: 2 }}>
-                  <option value="web">Human (web)</option>
-                  <option value="rule_based">AI — Rule-based</option>
-                  <option value="ai_commander">AI — Commander</option>
-                </select>
-                {cfg.agent_type === 'web' && (
-                  <label style={{ fontSize: 11, color: '#64748b', display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <input type="checkbox" checked={cfg.use_advisor} onChange={(e) => setUseAdvisor(f.faction_id, e.target.checked)} />
-                    advisor
-                  </label>
-                )}
+              <div key={f.faction_id} style={{ padding: '8px 0', borderBottom: '1px solid #00d4ff11' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 12, color: '#e2e8f0' }}>{f.name}</div>
+                    <div style={{ fontSize: 10, color: '#475569', fontFamily: 'Courier New', marginTop: 1 }}>{f.archetype}</div>
+                  </div>
+                  <select value={cfg.agent_type} onChange={(e) => setAgentType(f.faction_id, e.target.value as AgentConfig['agent_type'])}
+                    style={{ background: '#020b18', border: '1px solid #00d4ff33', color: '#94a3b8', padding: '4px 8px', fontFamily: 'Courier New', fontSize: 11, borderRadius: 2 }}>
+                    <option value="web">Human (web)</option>
+                    <option value="rule_based">AI — Rule-based</option>
+                    <option value="ai_commander">AI — Commander</option>
+                  </select>
+                  {cfg.agent_type === 'web' && (
+                    <label style={{ fontSize: 11, color: '#64748b', display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <input type="checkbox" checked={cfg.use_advisor} onChange={(e) => setUseAdvisor(f.faction_id, e.target.checked)} />
+                      advisor
+                    </label>
+                  )}
+                </div>
+                {cfg.agent_type === 'rule_based' && (() => {
+                  const customProfiles = loadProfiles()
+                  const hasCustom = cfg.custom_invest_weights != null
+                  const selectedCustomId = hasCustom
+                    ? customProfiles.find((p) => p.base_archetype === cfg.archetype_override &&
+                        JSON.stringify(p.invest_weights) === JSON.stringify(cfg.custom_invest_weights))?.id
+                    : undefined
+                  const selectValue = selectedCustomId ? `custom:${selectedCustomId}` : (cfg.archetype_override ?? f.archetype)
+                  const isOverridden = cfg.archetype_override !== undefined || hasCustom
+                  return (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6 }}>
+                      <span style={{ fontSize: 10, color: '#475569', fontFamily: 'Courier New' }}>PROFILE</span>
+                      <select value={selectValue}
+                        onChange={(e) => setArchetypeOverride(f.faction_id, e.target.value === f.archetype ? '' : e.target.value)}
+                        style={{ background: '#020b18', border: '1px solid #00d4ff22', color: isOverridden ? '#f59e0b' : '#64748b', padding: '3px 7px', fontFamily: 'Courier New', fontSize: 10, borderRadius: 2 }}>
+                        <optgroup label="Built-in">
+                          {ARCHETYPES.map((a) => (
+                            <option key={a} value={a}>{a}{a === f.archetype ? ' (default)' : ''}</option>
+                          ))}
+                        </optgroup>
+                        {customProfiles.length > 0 && (
+                          <optgroup label="Custom Profiles">
+                            {customProfiles.map((p) => (
+                              <option key={p.id} value={`custom:${p.id}`}>◆ {p.name}</option>
+                            ))}
+                          </optgroup>
+                        )}
+                      </select>
+                      {isOverridden && (
+                        <span style={{ fontSize: 9, color: '#f59e0b', fontFamily: 'Courier New', letterSpacing: 1 }}>
+                          {hasCustom ? 'CUSTOM' : 'OVERRIDDEN'}
+                        </span>
+                      )}
+                    </div>
+                  )
+                })()}
               </div>
             )
           })}
@@ -195,7 +278,7 @@ function SavedGamesTab() {
     }
   }
 
-  if (loading) return <div className="mono" style={{ color: '#334155', fontSize: 11 }}>LOADING SESSIONS...</div>
+  if (loading) return <div className="mono" style={{ color: '#64748b', fontSize: 11 }}>LOADING SESSIONS...</div>
 
   const active = sessions.filter((s) => !s.game_over)
 
@@ -204,7 +287,7 @@ function SavedGamesTab() {
       {error && <div style={{ color: '#ff4499', fontSize: 11, marginBottom: 12, ...MONO }}>{error}</div>}
 
       {active.length === 0 ? (
-        <div className="panel" style={{ color: '#334155', fontSize: 11, ...MONO, textAlign: 'center', padding: 32 }}>
+        <div className="panel" style={{ color: '#64748b', fontSize: 11, ...MONO, textAlign: 'center', padding: 32 }}>
           NO SAVED SESSIONS — START A NEW GAME
         </div>
       ) : (
@@ -304,7 +387,7 @@ function SessionAarRow({ s }: { s: SessionSummary }) {
           <div style={{ fontSize: 12, color: '#e2e8f0', marginBottom: 3 }}>{s.scenario_name}</div>
           <div style={{ fontSize: 10, color: '#64748b', ...MONO }}>
             {s.total_turns} TURNS · WINNER: {s.winner_coalition?.toUpperCase() ?? 'N/A'} · {new Date(s.updated_at).toLocaleDateString()}
-            {savedAars.length > 0 && <span style={{ color: '#334155' }}> · {savedAars.length} REPORT{savedAars.length !== 1 ? 'S' : ''} SAVED</span>}
+            {savedAars.length > 0 && <span style={{ color: '#64748b' }}> · {savedAars.length} REPORT{savedAars.length !== 1 ? 'S' : ''} SAVED</span>}
           </div>
         </div>
         <button className="btn-primary"
@@ -332,7 +415,7 @@ function SessionAarRow({ s }: { s: SessionSummary }) {
                       display: 'flex', justifyContent: 'space-between',
                     }}>
                     <span style={{ fontSize: 11, color: '#94a3b8', ...MONO }}>{a.focus ? `"${a.focus}"` : 'Standard report'}</span>
-                    <span style={{ fontSize: 10, color: '#334155', ...MONO }}>{new Date(a.created_at).toLocaleDateString()}</span>
+                    <span style={{ fontSize: 10, color: '#64748b', ...MONO }}>{new Date(a.created_at).toLocaleDateString()}</span>
                   </button>
                 ))}
               </div>
@@ -342,7 +425,7 @@ function SessionAarRow({ s }: { s: SessionSummary }) {
           {/* Focus input + generate */}
           <div style={{ marginBottom: 10 }}>
             <div style={{ fontSize: 10, color: '#475569', ...MONO, marginBottom: 4, letterSpacing: 1 }}>
-              FOCUS AREA <span style={{ color: '#334155' }}>(optional)</span>
+              FOCUS AREA <span style={{ color: '#64748b' }}>(optional)</span>
             </div>
             <textarea rows={2} value={focus} onChange={(e) => setFocus(e.target.value)}
               placeholder="e.g. coalition defection dynamics, Turn 4 kinetic exchange..."
@@ -369,11 +452,11 @@ function SessionAarRow({ s }: { s: SessionSummary }) {
               </div>
               {lastGenerated?.usage && (
                 <div style={{ display: 'flex', gap: 16, padding: '5px 10px', marginBottom: 8, border: '1px solid #00d4ff11', borderRadius: 2, background: '#020b18' }}>
-                  <span className="mono" style={{ fontSize: 9, color: '#334155', letterSpacing: 1 }}>AAR TOKENS</span>
+                  <span className="mono" style={{ fontSize: 9, color: '#64748b', letterSpacing: 1 }}>AAR TOKENS</span>
                   <span className="mono" style={{ fontSize: 9, color: '#475569' }}>IN {lastGenerated.usage.input_tokens.toLocaleString()}</span>
                   <span className="mono" style={{ fontSize: 9, color: '#475569' }}>OUT {lastGenerated.usage.output_tokens.toLocaleString()}</span>
                   {(lastGenerated.usage.cache_read_tokens ?? 0) > 0 && (
-                    <span className="mono" style={{ fontSize: 9, color: '#334155' }}>CACHE HIT {lastGenerated.usage.cache_read_tokens!.toLocaleString()}</span>
+                    <span className="mono" style={{ fontSize: 9, color: '#64748b' }}>CACHE HIT {lastGenerated.usage.cache_read_tokens!.toLocaleString()}</span>
                   )}
                 </div>
               )}
@@ -410,7 +493,7 @@ function AARTab() {
     listSessions().then(setSessions).catch(() => setError('Failed to load sessions')).finally(() => setLoading(false))
   }, [])
 
-  if (loading) return <div className="mono" style={{ color: '#334155', fontSize: 11 }}>LOADING SESSIONS...</div>
+  if (loading) return <div className="mono" style={{ color: '#64748b', fontSize: 11 }}>LOADING SESSIONS...</div>
 
   const completed = sessions.filter((s) => s.game_over)
 
@@ -418,7 +501,7 @@ function AARTab() {
     <div style={{ width: '100%', maxWidth: 700 }}>
       {error && <div style={{ color: '#ff4499', fontSize: 11, marginBottom: 12, ...MONO }}>{error}</div>}
       {completed.length === 0 ? (
-        <div className="panel" style={{ color: '#334155', fontSize: 11, ...MONO, textAlign: 'center', padding: 32 }}>
+        <div className="panel" style={{ color: '#64748b', fontSize: 11, ...MONO, textAlign: 'center', padding: 32 }}>
           NO COMPLETED SESSIONS YET
         </div>
       ) : (
@@ -430,8 +513,8 @@ function AARTab() {
   )
 }
 
+// ── Shared constants ──────────────────────────────────────────────────────────
 // ── Scenario Editor tab ───────────────────────────────────────────────────────
-const ARCHETYPES = ['mahanian', 'commercial_broker', 'gray_zone', 'rogue_accelerationist']
 const ASSET_KEYS = ['leo_nodes', 'meo_nodes', 'geo_nodes', 'cislunar_nodes', 'asat_kinetic', 'asat_deniable', 'ew_jammers', 'sda_sensors', 'launch_capacity'] as const
 const INPUT_S: React.CSSProperties = { background: '#020b18', border: '1px solid #00d4ff33', color: '#94a3b8', fontFamily: 'Courier New', fontSize: 11, borderRadius: 2, padding: '3px 6px' }
 
@@ -469,7 +552,7 @@ function FactionRow({ faction, index, onChange, onRemove }: {
   return (
     <div style={{ borderBottom: '1px solid #00d4ff0a', paddingBottom: 8, marginBottom: 8 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-        <span style={{ fontSize: 10, color: '#334155', ...MONO, minWidth: 16 }}>{index + 1}.</span>
+        <span style={{ fontSize: 10, color: '#64748b', ...MONO, minWidth: 16 }}>{index + 1}.</span>
         <input value={faction.name} onChange={(e) => onChange({ name: e.target.value })}
           style={{ ...INPUT_S, flex: 1 }} placeholder="Faction name" />
         <select value={faction.archetype} onChange={(e) => onChange({ archetype: e.target.value })}
@@ -478,7 +561,7 @@ function FactionRow({ faction, index, onChange, onRemove }: {
         </select>
         <input type="number" value={faction.budget_per_turn} onChange={(e) => onChange({ budget_per_turn: Number(e.target.value) })}
           style={{ ...INPUT_S, width: 54 }} min={0} title="Budget/turn" />
-        <button onClick={() => setOpen((v) => !v)} style={{ ...INPUT_S, cursor: 'pointer', padding: '3px 8px', color: open ? '#00d4ff' : '#334155' }}>
+        <button onClick={() => setOpen((v) => !v)} style={{ ...INPUT_S, cursor: 'pointer', padding: '3px 8px', color: open ? '#00d4ff' : '#64748b' }}>
           {open ? '▲' : '▼'}
         </button>
         <button onClick={onRemove} style={{ ...INPUT_S, cursor: 'pointer', padding: '3px 8px', color: '#ff4499', borderColor: '#ff449933' }}>✕</button>
@@ -675,7 +758,7 @@ function ScenarioEditorTab() {
               <button className="btn-primary" onClick={addFaction} style={{ fontSize: 10, padding: '2px 12px' }}>+ ADD</button>
             </div>
             {detail.factions.length === 0 && (
-              <div style={{ fontSize: 11, color: '#334155', ...MONO, textAlign: 'center', padding: 12 }}>NO FACTIONS — ADD ONE</div>
+              <div style={{ fontSize: 11, color: '#64748b', ...MONO, textAlign: 'center', padding: 12 }}>NO FACTIONS — ADD ONE</div>
             )}
             {detail.factions.map((f, i) => (
               <FactionRow key={i} faction={f} index={i}
@@ -732,6 +815,701 @@ function ScenarioEditorTab() {
           </button>
         </>
       )}
+    </div>
+  )
+}
+
+// ── Database Auditor tab ──────────────────────────────────────────────────────
+const DB_PHASE_COLOR: Record<string, string> = {
+  invest: '#00d4ff', operations: '#f59e0b', response: '#ff4499',
+}
+function dbPhaseColor(phase: string) { return DB_PHASE_COLOR[phase] ?? '#64748b' }
+function dbSeverityBar(s: number) {
+  const filled = Math.round(s * 5)
+  return '█'.repeat(filled) + '░'.repeat(5 - filled)
+}
+function exportHistoryJson(data: HistoryData, sessionId: string) {
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url; a.download = `astrakon-audit-${sessionId.slice(0, 8)}.json`
+  a.click(); URL.revokeObjectURL(url)
+}
+function exportDecisionsCsv(data: HistoryData, sessionId: string) {
+  const header = ['turn', 'phase', 'faction_id', 'rationale', 'timestamp']
+  const rows = data.decisions.map((d) => [
+    d.turn, d.phase, d.faction_id,
+    `"${(d.rationale ?? '').replace(/"/g, '""')}"`,
+    d.timestamp,
+  ])
+  const csv = [header, ...rows].map((r) => r.join(',')).join('\n')
+  const blob = new Blob([csv], { type: 'text/csv' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url; a.download = `astrakon-decisions-${sessionId.slice(0, 8)}.csv`
+  a.click(); URL.revokeObjectURL(url)
+}
+
+type AuditSubTab = 'DECISIONS' | 'EVENTS' | 'DIVERGENCE' | 'TOKENS'
+
+function DbAuditorTab() {
+  const [sessions, setSessions] = useState<SessionSummary[]>([])
+  const [selectedId, setSelectedId] = useState('')
+  const [data, setData] = useState<HistoryData | null>(null)
+  const [sessionsLoading, setSessionsLoading] = useState(true)
+  const [dataLoading, setDataLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [subTab, setSubTab] = useState<AuditSubTab>('DECISIONS')
+  const [filterFaction, setFilterFaction] = useState('')
+  const [filterTurn, setFilterTurn] = useState('')
+
+  useEffect(() => {
+    listSessions()
+      .then(setSessions)
+      .catch(() => setError('Failed to load sessions'))
+      .finally(() => setSessionsLoading(false))
+  }, [])
+
+  async function handleSelect(id: string) {
+    setSelectedId(id); setData(null); setFilterFaction(''); setFilterTurn('')
+    if (!id) return
+    setDataLoading(true); setError(null)
+    try {
+      setData(await getHistory(id))
+    } catch (e) {
+      setError(String(e))
+    } finally {
+      setDataLoading(false)
+    }
+  }
+
+  const selectedSession = sessions.find((s) => s.session_id === selectedId)
+  const factions = data ? [...new Set(data.decisions.map((d) => d.faction_id))].sort() : []
+
+  const filteredDecisions = (data?.decisions ?? []).filter((d) => {
+    if (filterFaction && d.faction_id !== filterFaction) return false
+    if (filterTurn && String(d.turn) !== filterTurn) return false
+    return true
+  })
+  const filteredEvents = (data?.events ?? []).filter((e) => {
+    if (filterTurn && String(e.turn) !== filterTurn) return false
+    return true
+  })
+  const decisionsByTurn = filteredDecisions.reduce<Record<number, typeof filteredDecisions>>((acc, d) => {
+    ;(acc[d.turn] ??= []).push(d); return acc
+  }, {})
+  const eventsByTurn = filteredEvents.reduce<Record<number, typeof filteredEvents>>((acc, e) => {
+    ;(acc[e.turn] ??= []).push(e); return acc
+  }, {})
+
+  return (
+    <div style={{ width: '100%', maxWidth: 700 }}>
+      {/* Session selector */}
+      <div style={{ display: 'flex', gap: 8, marginBottom: 12, alignItems: 'center' }}>
+        {sessionsLoading ? (
+          <div className="mono" style={{ color: '#64748b', fontSize: 11 }}>LOADING SESSIONS...</div>
+        ) : (
+          <select value={selectedId} onChange={(e) => void handleSelect(e.target.value)}
+            style={{ ...INPUT_S, flex: 1, padding: '6px 10px', fontSize: 12, marginBottom: 0 }}>
+            <option value="">— select session to audit —</option>
+            {sessions.map((s) => (
+              <option key={s.session_id} value={s.session_id}>
+                {s.scenario_name} · T{s.turn}/{s.total_turns} · {s.game_over ? 'COMPLETE' : 'IN PROGRESS'} · {s.session_id.slice(0, 8)}
+              </option>
+            ))}
+          </select>
+        )}
+        {data && (
+          <>
+            <button className="btn-primary" onClick={() => exportHistoryJson(data, selectedId)}
+              style={{ fontSize: 10, padding: '4px 12px', borderColor: '#00d4ff66', color: '#00d4ff', whiteSpace: 'nowrap' }}>
+              ↓ JSON
+            </button>
+            <button className="btn-primary" onClick={() => exportDecisionsCsv(data, selectedId)}
+              style={{ fontSize: 10, padding: '4px 12px', borderColor: '#00ff8866', color: '#00ff88', whiteSpace: 'nowrap' }}>
+              ↓ CSV
+            </button>
+          </>
+        )}
+      </div>
+
+      {error && <div style={{ color: '#ff4499', fontSize: 11, marginBottom: 10, ...MONO }}>{error}</div>}
+
+      {selectedSession && (
+        <div style={{ fontSize: 10, color: '#64748b', ...MONO, marginBottom: 12 }}>
+          {selectedSession.scenario_name} ·{' '}
+          {selectedSession.game_over
+            ? `WINNER: ${selectedSession.winner_coalition?.toUpperCase() ?? 'DRAW'}`
+            : `T${selectedSession.turn}/${selectedSession.total_turns} IN PROGRESS`
+          } · {new Date(selectedSession.updated_at).toLocaleString()}
+        </div>
+      )}
+
+      {dataLoading && <div className="mono" style={{ color: '#64748b', fontSize: 11, marginBottom: 12 }}>LOADING AUDIT DATA...</div>}
+
+      {data && (
+        <div className="panel">
+          {/* Sub-tab bar + filters */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14, borderBottom: '1px solid #00d4ff11', paddingBottom: 0 }}>
+            <div style={{ display: 'flex', gap: 0 }}>
+              {(['DECISIONS', 'EVENTS', 'DIVERGENCE', 'TOKENS'] as AuditSubTab[]).map((t) => (
+                <button key={t} onClick={() => setSubTab(t)} style={{
+                  background: 'none', border: 'none',
+                  borderBottom: subTab === t ? '2px solid #00d4ff' : '2px solid transparent',
+                  color: subTab === t ? '#00d4ff' : '#64748b',
+                  fontFamily: 'Courier New', fontSize: 10, letterSpacing: 2,
+                  padding: '6px 12px', cursor: 'pointer', marginBottom: -1,
+                }}>{t}</button>
+              ))}
+            </div>
+            <span style={{ flex: 1 }} />
+            {(subTab === 'DECISIONS' || subTab === 'EVENTS') && (
+              <>
+                <input placeholder="Turn #" value={filterTurn} onChange={(e) => setFilterTurn(e.target.value)}
+                  style={{ width: 56, ...MONO, background: '#020b18', border: '1px solid #00d4ff22', color: '#94a3b8', padding: '3px 7px', fontSize: 10, borderRadius: 2 }} />
+                {subTab === 'DECISIONS' && (
+                  <select value={filterFaction} onChange={(e) => setFilterFaction(e.target.value)}
+                    style={{ ...MONO, background: '#020b18', border: '1px solid #00d4ff22', color: '#94a3b8', padding: '3px 7px', fontSize: 10, borderRadius: 2 }}>
+                    <option value="">All Factions</option>
+                    {factions.map((f) => <option key={f} value={f}>{f}</option>)}
+                  </select>
+                )}
+              </>
+            )}
+          </div>
+
+          {/* DECISIONS */}
+          {subTab === 'DECISIONS' && (
+            Object.keys(decisionsByTurn).length === 0
+              ? <div className="mono" style={{ color: '#64748b', fontSize: 11, textAlign: 'center', padding: 24 }}>NO DECISIONS RECORDED</div>
+              : Object.entries(decisionsByTurn).sort(([a], [b]) => Number(a) - Number(b)).map(([turn, decisions]) => (
+                  <div key={turn} style={{ marginBottom: 20 }}>
+                    <div className="mono" style={{ fontSize: 10, color: '#00d4ff33', letterSpacing: 3, marginBottom: 8, borderBottom: '1px solid #00d4ff0a', paddingBottom: 3 }}>
+                      ── TURN {turn}
+                    </div>
+                    {decisions.map((d) => (
+                      <div key={d.id} style={{ marginBottom: 10, padding: '8px 10px', background: 'rgba(0,212,255,0.02)', border: '1px solid #00d4ff0a', borderRadius: 2 }}>
+                        <div style={{ display: 'flex', gap: 10, marginBottom: d.rationale ? 5 : 0, alignItems: 'center' }}>
+                          <span className="mono" style={{ fontSize: 10, color: dbPhaseColor(d.phase), letterSpacing: 2 }}>{d.phase.toUpperCase()}</span>
+                          <span className="mono" style={{ fontSize: 10, color: '#64748b' }}>{d.faction_id}</span>
+                          <span style={{ flex: 1 }} />
+                          <span className="mono" style={{ fontSize: 9, color: '#1e3a4a' }}>{new Date(d.timestamp).toLocaleTimeString()}</span>
+                        </div>
+                        {d.rationale && <div style={{ fontSize: 11, color: '#94a3b8', lineHeight: 1.55, whiteSpace: 'pre-wrap' }}>{d.rationale}</div>}
+                      </div>
+                    ))}
+                  </div>
+                ))
+          )}
+
+          {/* EVENTS */}
+          {subTab === 'EVENTS' && (
+            Object.keys(eventsByTurn).length === 0
+              ? <div className="mono" style={{ color: '#64748b', fontSize: 11, textAlign: 'center', padding: 24 }}>NO EVENTS RECORDED</div>
+              : Object.entries(eventsByTurn).sort(([a], [b]) => Number(a) - Number(b)).map(([turn, events]) => (
+                  <div key={turn} style={{ marginBottom: 20 }}>
+                    <div className="mono" style={{ fontSize: 10, color: '#f59e0b33', letterSpacing: 3, marginBottom: 8, borderBottom: '1px solid #f59e0b0a', paddingBottom: 3 }}>
+                      ── TURN {turn}
+                    </div>
+                    {events.map((e, i) => (
+                      <div key={i} style={{ marginBottom: 8, padding: '8px 10px', background: 'rgba(245,158,11,0.02)', border: '1px solid #f59e0b0a', borderRadius: 2 }}>
+                        <div style={{ display: 'flex', gap: 10, marginBottom: 4, alignItems: 'center' }}>
+                          <span className="mono" style={{ fontSize: 10, color: '#f59e0b', letterSpacing: 1 }}>{dbSeverityBar(e.severity)} {e.event_type.toUpperCase()}</span>
+                          <span style={{ flex: 1 }} />
+                          <span className="mono" style={{ fontSize: 9, color: '#64748b' }}>triggered by {e.triggered_by}</span>
+                        </div>
+                        <div style={{ fontSize: 11, color: '#94a3b8' }}>{e.description}</div>
+                      </div>
+                    ))}
+                  </div>
+                ))
+          )}
+
+          {/* DIVERGENCE */}
+          {subTab === 'DIVERGENCE' && (
+            data.divergences.length === 0
+              ? <div className="mono" style={{ color: '#64748b', fontSize: 11, textAlign: 'center', padding: 24 }}>NO ADVISOR DIVERGENCES RECORDED</div>
+              : data.divergences.map((d) => (
+                  <div key={d.id} style={{ marginBottom: 14, padding: '10px', background: 'rgba(245,158,11,0.02)', border: '1px solid #f59e0b11', borderRadius: 2 }}>
+                    <div style={{ display: 'flex', gap: 10, marginBottom: 8, alignItems: 'center' }}>
+                      <span className="mono" style={{ fontSize: 10, color: dbPhaseColor(d.phase) }}>T{d.turn} · {d.phase.toUpperCase()}</span>
+                      <span className="mono" style={{ fontSize: 10, color: '#64748b' }}>{d.faction_id}</span>
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                      <div>
+                        <div className="mono" style={{ fontSize: 9, color: '#f59e0b66', marginBottom: 4, letterSpacing: 2 }}>ADVISOR RECOMMENDED</div>
+                        <pre style={{ fontSize: 10, color: '#64748b', whiteSpace: 'pre-wrap', ...MONO, margin: 0 }}>
+                          {JSON.stringify(JSON.parse(d.recommendation_json), null, 2)}
+                        </pre>
+                      </div>
+                      <div>
+                        <div className="mono" style={{ fontSize: 9, color: '#00d4ff66', marginBottom: 4, letterSpacing: 2 }}>HUMAN DECIDED</div>
+                        <pre style={{ fontSize: 10, color: '#64748b', whiteSpace: 'pre-wrap', ...MONO, margin: 0 }}>
+                          {JSON.stringify(JSON.parse(d.final_decision_json), null, 2)}
+                        </pre>
+                      </div>
+                    </div>
+                  </div>
+                ))
+          )}
+
+          {/* TOKENS */}
+          {subTab === 'TOKENS' && (
+            data.token_summary.length === 0
+              ? <div className="mono" style={{ color: '#64748b', fontSize: 11, textAlign: 'center', padding: 24 }}>NO TOKEN DATA RECORDED</div>
+              : <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 4rem 4rem 4rem 4rem', columnGap: 12, rowGap: 6 }}>
+                  {['FACTION', 'ROLE', 'IN', 'OUT', 'CACHE-R', 'CACHE-W'].map((h) => (
+                    <div key={h} className="mono" style={{ fontSize: 9, color: '#64748b', letterSpacing: 1, paddingBottom: 4, borderBottom: '1px solid #00d4ff11' }}>{h}</div>
+                  ))}
+                  {data.token_summary.map((row, i) => (
+                    <React.Fragment key={i}>
+                      <div style={{ fontSize: 10, color: '#94a3b8', ...MONO }}>{row.faction_id}</div>
+                      <div style={{ fontSize: 10, color: '#64748b', ...MONO }}>{row.role}</div>
+                      <div style={{ fontSize: 10, color: '#00d4ff', ...MONO, textAlign: 'right' }}>{row.input_tokens.toLocaleString()}</div>
+                      <div style={{ fontSize: 10, color: '#00ff88', ...MONO, textAlign: 'right' }}>{row.output_tokens.toLocaleString()}</div>
+                      <div style={{ fontSize: 10, color: '#64748b', ...MONO, textAlign: 'right' }}>{row.cache_read_tokens.toLocaleString()}</div>
+                      <div style={{ fontSize: 10, color: '#64748b', ...MONO, textAlign: 'right' }}>{row.cache_creation_tokens.toLocaleString()}</div>
+                    </React.Fragment>
+                  ))}
+                </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Agent Profiles tab ────────────────────────────────────────────────────────
+const BUILTIN_PROFILES = [
+  {
+    id: 'mahanian', aliases: ['mahanian'], color: '#00d4ff',
+    name: 'MAHANIAN', tagline: 'Balanced SDA/orbital doctrine',
+    doctrine: 'Control the sea-lanes of space through persistent presence at every orbital tier. Invest in sensors and nodes, hold the high ground when threatened, coordinate with allies to pool intelligence.',
+    phases: {
+      invest: [['Normal', 'MEO + GEO priority, R&D + launch capacity'], ['Urgent', 'Pivot to GEO/MEO/Cislunar'], ['Critical', '30% GEO + 20% MEO + 20% Cislunar + kinetic reserve'], ['Ahead', 'Consolidate — commercial + influence + hardening']],
+      ops: [['Default', 'SDA sweep on adversary orbital assets'], ['Critical + ASAT', 'Kinetic intercept'], ['Even turns + allies', 'Coalition SDA coordination']],
+      response: [['Incoming threat', 'Escalate + deniable retaliation if armed'], ['Critical', 'Escalate publicly'], ['Urgent', 'Measured escalation'], ['Default', 'Maintain stability']],
+    },
+    defaultWeights: {
+      normal:   { meo_deployment: 0.20, geo_deployment: 0.15, r_and_d: 0.15, constellation: 0.10, launch_capacity: 0.10, commercial: 0.10, influence_ops: 0.05, education: 0.05, covert: 0.05, diplomacy: 0.05 },
+      urgent:   { geo_deployment: 0.25, meo_deployment: 0.25, cislunar_deployment: 0.10, constellation: 0.10, launch_capacity: 0.10, r_and_d: 0.10, covert: 0.05, diplomacy: 0.05 },
+      critical: { geo_deployment: 0.30, cislunar_deployment: 0.20, meo_deployment: 0.20, launch_capacity: 0.15, kinetic_weapons: 0.15 },
+      ahead:    { r_and_d: 0.20, constellation: 0.15, meo_deployment: 0.10, geo_deployment: 0.05, launch_capacity: 0.10, commercial: 0.15, influence_ops: 0.10, education: 0.05, covert: 0.05, diplomacy: 0.05 },
+    },
+  },
+  {
+    id: 'commercial_broker', aliases: ['commercial_broker'], color: '#00ff88',
+    name: 'COMMERCIAL BROKER', tagline: 'Market-first doctrine',
+    doctrine: 'Win through economic dominance. Build the densest constellation, maximize launch throughput, and crowd adversaries out of commercial markets. Avoid kinetic escalation — conflict damages brand value and market access.',
+    phases: {
+      invest: [['Normal', '25% commercial + 20% constellation + launch capacity'], ['Critical', 'Pivot to orbital mass — maintain commercial resilience'], ['Ahead', 'Expand commercial + R&D + diplomacy']],
+      ops: [['Allies available', 'Coalition commercial integration and launch pooling'], ['Default', 'Market intelligence sweep on adversary constellation']],
+      response: [['Incoming threat', 'Public appeal to international norms — protect brand'], ['Critical', 'Minimal escalation to signal resolve'], ['Default', 'De-escalate — protect market access']],
+    },
+    defaultWeights: {
+      normal:   { commercial: 0.25, constellation: 0.20, launch_capacity: 0.15, r_and_d: 0.15, meo_deployment: 0.10, education: 0.10, diplomacy: 0.05 },
+      urgent:   { constellation: 0.25, meo_deployment: 0.20, commercial: 0.15, geo_deployment: 0.15, launch_capacity: 0.15, r_and_d: 0.10 },
+      critical: { constellation: 0.25, meo_deployment: 0.20, commercial: 0.15, geo_deployment: 0.15, launch_capacity: 0.15, r_and_d: 0.10 },
+      ahead:    { commercial: 0.25, constellation: 0.15, meo_deployment: 0.15, r_and_d: 0.15, education: 0.10, launch_capacity: 0.10, diplomacy: 0.10 },
+    },
+  },
+  {
+    id: 'gray_zone', aliases: ['gray_zone', 'patient_dragon'], color: '#f59e0b',
+    name: 'GRAY ZONE', tagline: 'Deniable ops doctrine',
+    doctrine: 'Win without attribution. Invest in covert capability alongside orbital mass. Disrupt adversary constellations through co-orbital approaches and EW jamming. Deny publicly, act deniably.',
+    phases: {
+      invest: [['Normal', 'Covert + MEO/GEO + influence ops'], ['Critical', 'Surge covert + high-orbit'], ['Ahead', 'R&D + MEO + covert + influence']],
+      ops: [['Urgent/Critical', 'Co-orbital deniable approach'], ['EW available', 'Jam adversary SDA'], ['Allies', 'Intelligence sharing'], ['Default', 'SDA sweep']],
+      response: [['Incoming + deniable', 'Deny publicly — retaliate deniably next turn'], ['Critical', 'Escalate with deniable retaliation'], ['Default', 'Strategic ambiguity']],
+    },
+    defaultWeights: {
+      normal:   { covert: 0.20, meo_deployment: 0.20, geo_deployment: 0.15, constellation: 0.10, influence_ops: 0.10, launch_capacity: 0.10, r_and_d: 0.10, diplomacy: 0.05 },
+      urgent:   { covert: 0.25, geo_deployment: 0.25, meo_deployment: 0.20, influence_ops: 0.15, launch_capacity: 0.15 },
+      critical: { covert: 0.25, geo_deployment: 0.25, meo_deployment: 0.20, influence_ops: 0.15, launch_capacity: 0.15 },
+      ahead:    { r_and_d: 0.15, meo_deployment: 0.20, geo_deployment: 0.10, covert: 0.15, influence_ops: 0.15, commercial: 0.10, constellation: 0.10, diplomacy: 0.05 },
+    },
+  },
+  {
+    id: 'rogue_accelerationist', aliases: ['rogue_accelerationist', 'iron_napoleon'], color: '#ef4444',
+    name: 'ROGUE ACCELERATIONIST', tagline: 'Kinetic-first doctrine',
+    doctrine: 'Force the issue. Maximize ASAT stockpile, strike early, escalate deliberately. The cost of competition must rise for all parties. A draw is a defeat — there is no restraint.',
+    phases: {
+      invest: [['Normal', '25% kinetic + MEO/GEO/launch'], ['Critical', '40% kinetic + 25% MEO + 20% GEO']],
+      ops: [['ASAT kinetic > 1', 'Kinetic strike on adversary'], ['Deniable available', 'Deniable disruption'], ['Default', 'Patrol — project resolve']],
+      response: [['Armed + adversary', 'Escalate + retaliate'], ['Default', 'Escalate unconditionally']],
+    },
+    defaultWeights: {
+      normal:   { kinetic_weapons: 0.25, covert: 0.10, meo_deployment: 0.20, geo_deployment: 0.15, launch_capacity: 0.15, constellation: 0.15 },
+      urgent:   { kinetic_weapons: 0.30, meo_deployment: 0.25, geo_deployment: 0.20, launch_capacity: 0.15, covert: 0.10 },
+      critical: { kinetic_weapons: 0.40, meo_deployment: 0.25, geo_deployment: 0.20, launch_capacity: 0.15 },
+      ahead:    { kinetic_weapons: 0.25, covert: 0.10, meo_deployment: 0.20, geo_deployment: 0.15, launch_capacity: 0.15, constellation: 0.15 },
+    },
+  },
+]
+
+const URGENCY_COLOR: Record<UrgencyState, string> = {
+  normal: '#00d4ff', urgent: '#f59e0b', critical: '#ef4444', ahead: '#00ff88',
+}
+
+function makeEmptyWeights(): Record<UrgencyState, Partial<Record<InvestKey, number>>> {
+  return { normal: {}, urgent: {}, critical: {}, ahead: {} }
+}
+
+function sumWeights(w: Partial<Record<InvestKey, number>>): number {
+  return Object.values(w).reduce((s, v) => s + (v ?? 0), 0)
+}
+
+function WeightEditor({
+  weights, onChange,
+}: {
+  weights: Partial<Record<InvestKey, number>>
+  urgency?: UrgencyState
+  onChange: (key: InvestKey, val: number) => void
+}) {
+  const total = sumWeights(weights)
+  const remaining = Math.max(0, 1 - total)
+  const INPUT_W: React.CSSProperties = { width: 52, background: '#020b18', border: '1px solid #00d4ff22', color: '#94a3b8', fontFamily: 'Courier New', fontSize: 10, borderRadius: 2, padding: '2px 5px', textAlign: 'right' }
+  return (
+    <div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px 16px', marginBottom: 8 }}>
+        {INVEST_KEYS.map((k) => (
+          <div key={k} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ fontSize: 9, color: '#475569', fontFamily: 'Courier New', minWidth: 110 }}>{k}</span>
+            <input type="number" min={0} max={1} step={0.05}
+              value={weights[k] ?? 0}
+              onChange={(e) => onChange(k, Math.round(Number(e.target.value) * 100) / 100)}
+              style={{ ...INPUT_W }} />
+          </div>
+        ))}
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, paddingTop: 6, borderTop: '1px solid #00d4ff0a' }}>
+        <span style={{ fontSize: 9, color: '#475569', fontFamily: 'Courier New' }}>SUM</span>
+        <span style={{ fontSize: 11, color: total > 1.001 ? '#ef4444' : '#00ff88', fontFamily: 'Courier New', fontWeight: 'bold' }}>
+          {total.toFixed(2)}
+        </span>
+        <span style={{ fontSize: 9, color: '#475569', fontFamily: 'Courier New', flex: 1 }}>
+          {total > 1.001 ? '⚠ exceeds 1.0 — backend will use as-is' : `${remaining.toFixed(2)} remaining`}
+        </span>
+      </div>
+    </div>
+  )
+}
+
+function ProfileEditor({
+  profile, onSave, onCancel,
+}: {
+  profile: CustomProfile
+  onSave: (p: CustomProfile) => void
+  onCancel: () => void
+}) {
+  const [draft, setDraft] = useState<CustomProfile>(JSON.parse(JSON.stringify(profile)))
+  const [urgencyTab, setUrgencyTab] = useState<UrgencyState>('normal')
+
+  function setWeight(urgency: UrgencyState, key: InvestKey, val: number) {
+    setDraft((prev) => ({
+      ...prev,
+      invest_weights: {
+        ...prev.invest_weights,
+        [urgency]: { ...prev.invest_weights[urgency], [key]: val },
+      },
+    }))
+  }
+
+  function copyFrom(srcUrgency: UrgencyState) {
+    setDraft((prev) => ({
+      ...prev,
+      invest_weights: {
+        ...prev.invest_weights,
+        [urgencyTab]: { ...prev.invest_weights[srcUrgency] },
+      },
+    }))
+  }
+
+  const INPUT_F: React.CSSProperties = { background: '#020b18', border: '1px solid #00d4ff33', color: '#94a3b8', fontFamily: 'Courier New', fontSize: 11, borderRadius: 2, padding: '4px 8px', width: '100%', boxSizing: 'border-box' }
+
+  return (
+    <div className="panel" style={{ marginBottom: 12 }}>
+      <div className="panel-title" style={{ marginBottom: 12 }}>
+        {draft.id === profile.id && profile.name ? `EDITING: ${profile.name}` : 'NEW PROFILE'}
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 12 }}>
+        <div>
+          <div style={{ fontSize: 9, color: '#475569', fontFamily: 'Courier New', marginBottom: 3 }}>NAME</div>
+          <input value={draft.name} onChange={(e) => setDraft((p) => ({ ...p, name: e.target.value }))} style={INPUT_F} />
+        </div>
+        <div>
+          <div style={{ fontSize: 9, color: '#475569', fontFamily: 'Courier New', marginBottom: 3 }}>BASE ARCHETYPE (OPS + RESPONSE)</div>
+          <select value={draft.base_archetype} onChange={(e) => setDraft((p) => ({ ...p, base_archetype: e.target.value }))}
+            style={{ ...INPUT_F }}>
+            {ARCHETYPES.map((a) => <option key={a} value={a}>{a}</option>)}
+          </select>
+        </div>
+      </div>
+      <div style={{ marginBottom: 12 }}>
+        <div style={{ fontSize: 9, color: '#475569', fontFamily: 'Courier New', marginBottom: 3 }}>DOCTRINE / DESCRIPTION</div>
+        <textarea value={draft.description} onChange={(e) => setDraft((p) => ({ ...p, description: e.target.value }))}
+          rows={2} style={{ ...INPUT_F, resize: 'vertical' }} />
+      </div>
+
+      <div style={{ marginBottom: 8 }}>
+        <div style={{ fontSize: 9, color: '#475569', fontFamily: 'Courier New', marginBottom: 6, letterSpacing: 1 }}>INVESTMENT WEIGHTS BY URGENCY STATE</div>
+        <div style={{ display: 'flex', gap: 0, marginBottom: 10, borderBottom: '1px solid #00d4ff0a' }}>
+          {URGENCY_STATES.map((u) => (
+            <button key={u} onClick={() => setUrgencyTab(u)} style={{
+              background: 'none', border: 'none',
+              borderBottom: urgencyTab === u ? `2px solid ${URGENCY_COLOR[u]}` : '2px solid transparent',
+              color: urgencyTab === u ? URGENCY_COLOR[u] : '#475569',
+              fontFamily: 'Courier New', fontSize: 10, padding: '5px 12px', cursor: 'pointer', marginBottom: -1,
+            }}>{u.toUpperCase()}</button>
+          ))}
+          <span style={{ flex: 1 }} />
+          <span style={{ fontSize: 9, color: '#334155', fontFamily: 'Courier New', alignSelf: 'center', marginRight: 4 }}>copy from:</span>
+          {URGENCY_STATES.filter((u) => u !== urgencyTab).map((u) => (
+            <button key={u} onClick={() => copyFrom(u)} style={{
+              background: 'none', border: '1px solid #00d4ff11', borderRadius: 2,
+              color: '#475569', fontFamily: 'Courier New', fontSize: 9,
+              padding: '2px 7px', cursor: 'pointer', marginLeft: 3,
+            }}>{u}</button>
+          ))}
+        </div>
+        <WeightEditor
+          weights={draft.invest_weights[urgencyTab]}
+          urgency={urgencyTab}
+          onChange={(key, val) => setWeight(urgencyTab, key, val)}
+        />
+      </div>
+
+      <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+        <button className="btn-primary" onClick={() => onSave(draft)}
+          style={{ flex: 1 }}>[ SAVE PROFILE ]</button>
+        <button className="btn-primary" onClick={onCancel}
+          style={{ borderColor: '#334155', color: '#64748b' }}>CANCEL</button>
+      </div>
+    </div>
+  )
+}
+
+function AgentProfilesTab() {
+  const [customProfiles, setCustomProfiles] = useState<CustomProfile[]>(() => loadProfiles())
+  const [selectedId, setSelectedId] = useState<string>(BUILTIN_PROFILES[0].id)
+  const [editing, setEditing] = useState<CustomProfile | null>(null)
+  const [confirmDelete, setConfirmDelete] = useState(false)
+
+  const builtinProfile = BUILTIN_PROFILES.find((p) => p.id === selectedId)
+  const customProfile = customProfiles.find((p) => p.id === selectedId)
+
+  function saveProfile(p: CustomProfile) {
+    const updated = customProfiles.some((x) => x.id === p.id)
+      ? customProfiles.map((x) => x.id === p.id ? p : x)
+      : [...customProfiles, p]
+    setCustomProfiles(updated)
+    saveProfiles(updated)
+    setSelectedId(p.id)
+    setEditing(null)
+  }
+
+  function deleteProfile(id: string) {
+    const updated = customProfiles.filter((p) => p.id !== id)
+    setCustomProfiles(updated)
+    saveProfiles(updated)
+    setSelectedId(BUILTIN_PROFILES[0].id)
+    setConfirmDelete(false)
+  }
+
+  function cloneBuiltin(bp: typeof BUILTIN_PROFILES[0]) {
+    const newProfile: CustomProfile = {
+      id: `custom_${Date.now()}`,
+      name: `${bp.name} (custom)`,
+      description: bp.doctrine,
+      base_archetype: bp.id,
+      invest_weights: JSON.parse(JSON.stringify(bp.defaultWeights)),
+    }
+    setEditing(newProfile)
+  }
+
+  function cloneCustom(cp: CustomProfile) {
+    const newProfile: CustomProfile = {
+      ...JSON.parse(JSON.stringify(cp)),
+      id: `custom_${Date.now()}`,
+      name: `${cp.name} (copy)`,
+    }
+    setEditing(newProfile)
+  }
+
+  const phaseColor: Record<string, string> = { invest: '#00d4ff', ops: '#f59e0b', response: '#ff4499' }
+  const phaseLabel: Record<string, string> = { invest: 'INVEST', ops: 'OPERATIONS', response: 'RESPONSE' }
+
+  if (editing) {
+    return (
+      <div style={{ width: '100%', maxWidth: 700 }}>
+        <ProfileEditor profile={editing} onSave={saveProfile} onCancel={() => setEditing(null)} />
+      </div>
+    )
+  }
+
+  return (
+    <div style={{ width: '100%', maxWidth: 700 }}>
+      {/* Selector row */}
+      <div style={{ display: 'flex', gap: 0, marginBottom: 20, borderBottom: '1px solid #00d4ff11', flexWrap: 'wrap' }}>
+        {BUILTIN_PROFILES.map((p) => (
+          <button key={p.id} onClick={() => { setSelectedId(p.id); setConfirmDelete(false) }}
+            style={{
+              background: 'none', border: 'none',
+              borderBottom: selectedId === p.id ? `2px solid ${p.color}` : '2px solid transparent',
+              color: selectedId === p.id ? p.color : '#64748b',
+              fontFamily: 'Courier New', fontSize: 10, letterSpacing: 1,
+              padding: '8px 14px', cursor: 'pointer', marginBottom: -1, whiteSpace: 'nowrap',
+            }}>
+            {p.name}
+          </button>
+        ))}
+        {customProfiles.map((p) => (
+          <button key={p.id} onClick={() => { setSelectedId(p.id); setConfirmDelete(false) }}
+            style={{
+              background: 'none', border: 'none',
+              borderBottom: selectedId === p.id ? '2px solid #a78bfa' : '2px solid transparent',
+              color: selectedId === p.id ? '#a78bfa' : '#64748b',
+              fontFamily: 'Courier New', fontSize: 10, letterSpacing: 1,
+              padding: '8px 14px', cursor: 'pointer', marginBottom: -1, whiteSpace: 'nowrap',
+            }}>
+            ◆ {p.name}
+          </button>
+        ))}
+        <button onClick={() => {
+          const newProfile: CustomProfile = {
+            id: `custom_${Date.now()}`, name: 'New Profile', description: '',
+            base_archetype: 'mahanian', invest_weights: makeEmptyWeights(),
+          }
+          setEditing(newProfile)
+        }}
+          style={{
+            background: 'none', border: 'none', borderBottom: '2px solid transparent',
+            color: '#334155', fontFamily: 'Courier New', fontSize: 10,
+            padding: '8px 14px', cursor: 'pointer', marginBottom: -1,
+          }}>
+          + NEW
+        </button>
+      </div>
+
+      {/* Built-in profile view */}
+      {builtinProfile && (
+        <>
+          <div className="panel" style={{ marginBottom: 12, borderColor: `${builtinProfile.color}22` }}>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, marginBottom: 10 }}>
+              <div className="panel-title" style={{ margin: 0, color: builtinProfile.color }}>{builtinProfile.name}</div>
+              <div style={{ fontSize: 11, color: '#64748b', fontFamily: 'Courier New', flex: 1 }}>{builtinProfile.tagline}</div>
+              <button className="btn-primary" onClick={() => cloneBuiltin(builtinProfile)}
+                style={{ fontSize: 10, padding: '3px 12px', borderColor: '#a78bfa66', color: '#a78bfa', whiteSpace: 'nowrap' }}>
+                CLONE + EDIT
+              </button>
+            </div>
+            <div style={{ fontSize: 11, color: '#94a3b8', lineHeight: 1.7, marginBottom: 10, paddingBottom: 10, borderBottom: '1px solid #00d4ff0a' }}>
+              {builtinProfile.doctrine}
+            </div>
+            <div style={{ fontSize: 10, color: '#475569', fontFamily: 'Courier New', letterSpacing: 1 }}>
+              SCENARIO ARCHETYPES: {builtinProfile.aliases.join(', ')}
+            </div>
+          </div>
+          {(['invest', 'ops', 'response'] as const).map((phase) => (
+            <div key={phase} className="panel" style={{ marginBottom: 10, borderColor: `${phaseColor[phase]}11` }}>
+              <div className="panel-title" style={{ color: phaseColor[phase], marginBottom: 10 }}>{phaseLabel[phase]}</div>
+              {builtinProfile.phases[phase].map(([condition, behavior], i) => (
+                <div key={i} style={{ display: 'flex', gap: 10, padding: '5px 0', borderBottom: '1px solid #00d4ff06' }}>
+                  <div style={{ fontSize: 10, color: phaseColor[phase] + '99', fontFamily: 'Courier New', minWidth: 130, flexShrink: 0, paddingTop: 1 }}>
+                    {condition.toUpperCase()}
+                  </div>
+                  <div style={{ fontSize: 11, color: '#94a3b8', lineHeight: 1.55 }}>{behavior}</div>
+                </div>
+              ))}
+              {phase === 'invest' && (
+                <div style={{ marginTop: 10, paddingTop: 8, borderTop: '1px solid #00d4ff06' }}>
+                  <div style={{ fontSize: 9, color: '#334155', fontFamily: 'Courier New', letterSpacing: 1, marginBottom: 6 }}>DEFAULT WEIGHTS</div>
+                  {URGENCY_STATES.map((u) => {
+                    const w = builtinProfile.defaultWeights[u]
+                    const entries = Object.entries(w).filter(([, v]) => (v as number) > 0)
+                    return (
+                      <div key={u} style={{ display: 'flex', gap: 8, marginBottom: 4, alignItems: 'baseline' }}>
+                        <span style={{ fontSize: 9, color: URGENCY_COLOR[u], fontFamily: 'Courier New', minWidth: 60 }}>{u.toUpperCase()}</span>
+                        <span style={{ fontSize: 9, color: '#475569', fontFamily: 'Courier New', lineHeight: 1.4 }}>
+                          {entries.map(([k, v]) => `${k.replace(/_/g, ' ')} ${((v as number) * 100).toFixed(0)}%`).join(' · ')}
+                        </span>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          ))}
+        </>
+      )}
+
+      {/* Custom profile view */}
+      {customProfile && (
+        <>
+          <div className="panel" style={{ marginBottom: 12, borderColor: '#a78bfa22' }}>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, marginBottom: 10 }}>
+              <div className="panel-title" style={{ margin: 0, color: '#a78bfa' }}>◆ {customProfile.name}</div>
+              <div style={{ fontSize: 11, color: '#64748b', fontFamily: 'Courier New', flex: 1 }}>base: {customProfile.base_archetype}</div>
+              <button className="btn-primary" onClick={() => setEditing(JSON.parse(JSON.stringify(customProfile)))}
+                style={{ fontSize: 10, padding: '3px 12px', marginLeft: 4 }}>EDIT</button>
+              <button className="btn-primary" onClick={() => cloneCustom(customProfile)}
+                style={{ fontSize: 10, padding: '3px 12px', borderColor: '#a78bfa66', color: '#a78bfa' }}>CLONE</button>
+              {confirmDelete ? (
+                <>
+                  <button className="btn-primary" onClick={() => deleteProfile(customProfile.id)}
+                    style={{ fontSize: 10, padding: '3px 12px', borderColor: '#ef4444', color: '#ef4444' }}>CONFIRM DELETE</button>
+                  <button className="btn-primary" onClick={() => setConfirmDelete(false)}
+                    style={{ fontSize: 10, padding: '3px 10px', borderColor: '#334155', color: '#64748b' }}>✕</button>
+                </>
+              ) : (
+                <button className="btn-primary" onClick={() => setConfirmDelete(true)}
+                  style={{ fontSize: 10, padding: '3px 12px', borderColor: '#ef444433', color: '#ef4444' }}>DELETE</button>
+              )}
+            </div>
+            {customProfile.description && (
+              <div style={{ fontSize: 11, color: '#94a3b8', lineHeight: 1.7 }}>{customProfile.description}</div>
+            )}
+          </div>
+          <div className="panel" style={{ borderColor: '#a78bfa11' }}>
+            <div className="panel-title" style={{ color: '#00d4ff', marginBottom: 10 }}>INVEST WEIGHTS</div>
+            {URGENCY_STATES.map((u) => {
+              const w = customProfile.invest_weights[u]
+              const entries = Object.entries(w).filter(([, v]) => (v as number) > 0)
+              const total = sumWeights(w as Partial<Record<InvestKey, number>>)
+              return (
+                <div key={u} style={{ marginBottom: 8, padding: '6px 0', borderBottom: '1px solid #00d4ff06' }}>
+                  <div style={{ display: 'flex', gap: 8, marginBottom: 3, alignItems: 'center' }}>
+                    <span style={{ fontSize: 9, color: URGENCY_COLOR[u], fontFamily: 'Courier New', minWidth: 60 }}>{u.toUpperCase()}</span>
+                    <span style={{ fontSize: 9, color: total > 1.001 ? '#ef4444' : '#475569', fontFamily: 'Courier New' }}>Σ {total.toFixed(2)}</span>
+                  </div>
+                  <div style={{ fontSize: 9, color: '#475569', fontFamily: 'Courier New', lineHeight: 1.5 }}>
+                    {entries.length === 0
+                      ? <span style={{ color: '#334155' }}>— inherits from base archetype —</span>
+                      : entries.map(([k, v]) => `${k.replace(/_/g, ' ')} ${((v as number) * 100).toFixed(0)}%`).join(' · ')}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </>
+      )}
+
+      {/* Urgency reference */}
+      <div className="panel" style={{ marginTop: 12, borderColor: '#00d4ff0a' }}>
+        <div className="panel-title" style={{ marginBottom: 8 }}>URGENCY STATES</div>
+        {[
+          ['ahead', 'Coalition ≥5% above threshold — consolidate and deny adversary catch-up'],
+          ['normal', 'Default posture — balanced investment and operations'],
+          ['urgent', '8%+ behind with ≤5 turns — escalate investment pace'],
+          ['critical', '15%+ behind with ≤3 turns — emergency maximum aggression'],
+        ].map(([u, desc]) => (
+          <div key={u} style={{ display: 'flex', gap: 10, padding: '5px 0', borderBottom: '1px solid #00d4ff06' }}>
+            <div style={{ fontSize: 10, color: URGENCY_COLOR[u as UrgencyState], fontFamily: 'Courier New', minWidth: 70, flexShrink: 0 }}>{u.toUpperCase()}</div>
+            <div style={{ fontSize: 11, color: '#64748b', lineHeight: 1.55 }}>{desc}</div>
+          </div>
+        ))}
+      </div>
     </div>
   )
 }
@@ -952,6 +1730,89 @@ function HowToPlayTab() {
   )
 }
 
+// ── Reading List tab ──────────────────────────────────────────────────────────
+function ReadingListTab() {
+  const [query, setQuery] = useState('')
+
+  const filtered = useMemo(() => {
+    const q = query.toLowerCase()
+    if (!q) return LOADING_QUOTES
+    return LOADING_QUOTES.filter((qt) =>
+      qt.text.toLowerCase().includes(q) ||
+      qt.author.toLowerCase().includes(q) ||
+      qt.source.toLowerCase().includes(q)
+    )
+  }, [query])
+
+  const grouped = useMemo(() => {
+    const map = new Map<string, typeof LOADING_QUOTES>()
+    for (const qt of filtered) {
+      const key = qt.source
+      if (!map.has(key)) map.set(key, [])
+      map.get(key)!.push(qt)
+    }
+    return Array.from(map.entries()).sort(([a], [b]) => a.localeCompare(b))
+  }, [filtered])
+
+  return (
+    <div className="panel" style={{ width: '100%' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+        <div className="panel-title" style={{ margin: 0 }}>◆ READING LIST</div>
+        <span style={{ flex: 1 }} />
+        <span className="mono" style={{ fontSize: 9, color: '#475569' }}>{filtered.length} / {LOADING_QUOTES.length} QUOTES</span>
+      </div>
+
+      <input
+        placeholder="Search quotes, authors, sources…"
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+        style={{
+          width: '100%', boxSizing: 'border-box',
+          background: '#020b18', border: '1px solid #00d4ff33',
+          color: '#94a3b8', padding: '7px 12px',
+          fontFamily: 'Courier New', fontSize: 11,
+          borderRadius: 2, marginBottom: 20,
+        }}
+      />
+
+      {grouped.length === 0 && (
+        <div className="mono" style={{ color: '#64748b', fontSize: 11, textAlign: 'center', padding: 24 }}>
+          NO QUOTES MATCH "{query.toUpperCase()}"
+        </div>
+      )}
+
+      {grouped.map(([source, quotes]) => (
+        <div key={source} style={{ marginBottom: 24 }}>
+          <div className="mono" style={{
+            fontSize: 9, color: '#00d4ff66', letterSpacing: 3,
+            marginBottom: 10, paddingBottom: 4,
+            borderBottom: '1px solid #00d4ff11',
+          }}>
+            {source.toUpperCase()} · {quotes.length}
+          </div>
+          {quotes.map((qt, i) => (
+            <div key={i} style={{
+              padding: '10px 14px', marginBottom: 8,
+              background: 'rgba(0,212,255,0.02)',
+              border: '1px solid #00d4ff0a', borderRadius: 3,
+            }}>
+              <div style={{
+                fontSize: 13, color: '#94a3b8', fontStyle: 'italic',
+                lineHeight: 1.65, fontFamily: 'Georgia, serif', marginBottom: 6,
+              }}>
+                "{qt.text}"
+              </div>
+              <div className="mono" style={{ fontSize: 10, color: '#64748b' }}>
+                — {qt.author}
+              </div>
+            </div>
+          ))}
+        </div>
+      ))}
+    </div>
+  )
+}
+
 // ── Root ──────────────────────────────────────────────────────────────────────
 export default function SetupPage() {
   const [tab, setTab] = useState<Tab>('NEW GAME')
@@ -969,7 +1830,10 @@ export default function SetupPage() {
         {tab === 'SAVED GAMES' && <SavedGamesTab />}
         {tab === 'AFTER ACTION REVIEWS' && <AARTab />}
         {tab === 'SCENARIO EDITOR' && <ScenarioEditorTab />}
+        {tab === 'AGENT PROFILES' && <AgentProfilesTab />}
+        {tab === 'DATABASE AUDITOR' && <DbAuditorTab />}
         {tab === 'HOW TO PLAY' && <HowToPlayTab />}
+        {tab === 'READING LIST' && <ReadingListTab />}
       </div>
     </div>
   )

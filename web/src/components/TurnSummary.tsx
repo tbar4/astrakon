@@ -21,7 +21,7 @@ export default function TurnSummary({ gameState, coalitionDominance, onContinue 
       <div className="mono" style={{ color: '#00d4ff', fontSize: 16, letterSpacing: 6, marginBottom: 8 }}>
         ══ END OF TURN {turn} ══
       </div>
-      <div className="mono" style={{ color: '#334155', fontSize: 10, marginBottom: 32 }}>
+      <div className="mono" style={{ color: '#64748b', fontSize: 10, marginBottom: 32 }}>
         {total_turns - turn} turn{total_turns - turn !== 1 ? 's' : ''} remaining
       </div>
 

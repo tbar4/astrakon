@@ -150,7 +150,7 @@ export default function ResultPage() {
         </button>
       </div>
 
-      <div className="mono" style={{ color: '#334155', fontSize: 10, marginBottom: 32 }}>
+      <div className="mono" style={{ color: '#64748b', fontSize: 10, marginBottom: 32 }}>
         {turns_completed} turns · {scenarioName}
       </div>
 
@@ -160,12 +160,12 @@ export default function ResultPage() {
           <div style={{ textAlign: 'center', padding: '20px 0' }}>
             <div className="mono" style={{ fontSize: 14, color: '#00ff88', marginBottom: 8 }}>◆ WINNER</div>
             <div className="mono" style={{ fontSize: 22, color: '#00ff88', letterSpacing: 4 }}>{winner_coalition.toUpperCase()}</div>
-            <div className="mono" style={{ color: '#334155', fontSize: 10, marginTop: 8 }}>COALITION ACHIEVES ORBITAL DOMINANCE</div>
+            <div className="mono" style={{ color: '#64748b', fontSize: 10, marginTop: 8 }}>COALITION ACHIEVES ORBITAL DOMINANCE</div>
           </div>
         ) : (
           <div style={{ textAlign: 'center', padding: '20px 0' }}>
             <div className="mono" style={{ fontSize: 18, color: '#f59e0b', letterSpacing: 4 }}>DRAW</div>
-            <div className="mono" style={{ color: '#334155', fontSize: 10, marginTop: 8 }}>NO FACTION ACHIEVED HEGEMONY</div>
+            <div className="mono" style={{ color: '#64748b', fontSize: 10, marginTop: 8 }}>NO FACTION ACHIEVED HEGEMONY</div>
           </div>
         )}
       </div>
@@ -210,7 +210,7 @@ export default function ResultPage() {
                   <span style={{ fontSize: 11, color: '#94a3b8', fontFamily: 'Courier New' }}>
                     {s.focus ? `"${s.focus}"` : 'Standard report'}
                   </span>
-                  <span style={{ fontSize: 10, color: '#334155', fontFamily: 'Courier New' }}>
+                  <span style={{ fontSize: 10, color: '#64748b', fontFamily: 'Courier New' }}>
                     {new Date(s.created_at).toLocaleDateString()}
                   </span>
                 </button>
@@ -222,7 +222,7 @@ export default function ResultPage() {
         {/* Focus field */}
         <div style={{ marginBottom: 10 }}>
           <div style={{ fontSize: 10, color: '#475569', fontFamily: 'Courier New', marginBottom: 6, letterSpacing: 1 }}>
-            FOCUS AREA <span style={{ color: '#334155' }}>(optional — e.g. "coalition defection dynamics" or "Turn 4 kinetic exchange")</span>
+            FOCUS AREA <span style={{ color: '#64748b' }}>(optional — e.g. "coalition defection dynamics" or "Turn 4 kinetic exchange")</span>
           </div>
           <textarea
             ref={focusRef}
@@ -247,11 +247,11 @@ export default function ResultPage() {
       {/* AAR token usage — only shown for freshly generated reports */}
       {activeAar && !activeAar.cached && activeAar.usage && (
         <div style={{ width: '100%', maxWidth: 700, marginBottom: 8, display: 'flex', gap: 16, padding: '6px 12px', border: '1px solid #00d4ff11', borderRadius: 2, background: '#020b18' }}>
-          <span className="mono" style={{ fontSize: 9, color: '#334155', letterSpacing: 1 }}>AAR TOKENS</span>
+          <span className="mono" style={{ fontSize: 9, color: '#64748b', letterSpacing: 1 }}>AAR TOKENS</span>
           <span className="mono" style={{ fontSize: 9, color: '#475569' }}>IN {activeAar.usage.input_tokens.toLocaleString()}</span>
           <span className="mono" style={{ fontSize: 9, color: '#475569' }}>OUT {activeAar.usage.output_tokens.toLocaleString()}</span>
           {(activeAar.usage.cache_read_tokens ?? 0) > 0 && (
-            <span className="mono" style={{ fontSize: 9, color: '#334155' }}>CACHE HIT {activeAar.usage.cache_read_tokens!.toLocaleString()}</span>
+            <span className="mono" style={{ fontSize: 9, color: '#64748b' }}>CACHE HIT {activeAar.usage.cache_read_tokens!.toLocaleString()}</span>
           )}
         </div>
       )}

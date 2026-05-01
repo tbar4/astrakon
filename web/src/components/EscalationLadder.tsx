@@ -14,7 +14,7 @@ interface Props {
 export default function EscalationLadder({ rung }: Props) {
   return (
     <div style={{ padding: '8px 0' }}>
-      <div style={{ fontFamily: 'Courier New', fontSize: 9, color: '#334155', letterSpacing: 2, marginBottom: 6 }}>
+      <div style={{ fontFamily: 'Courier New', fontSize: 11, color: '#475569', letterSpacing: 2, marginBottom: 6 }}>
         ESCALATION
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
@@ -30,12 +30,12 @@ export default function EscalationLadder({ rung }: Props) {
               <div style={{
                 width: 8, height: 8, borderRadius: 1, flexShrink: 0,
                 background: active ? r.color : past ? r.color : 'transparent',
-                border: `1px solid ${active || past ? r.color : '#1e293b'}`,
+                border: `1px solid ${active || past ? r.color : '#334155'}`,
                 boxShadow: active ? `0 0 6px ${r.color}` : 'none',
               }} />
               <span style={{
-                fontFamily: 'Courier New', fontSize: 9,
-                color: active ? r.color : past ? r.color : '#1e293b',
+                fontFamily: 'Courier New', fontSize: 11,
+                color: active ? r.color : past ? r.color : '#475569',
                 letterSpacing: 1,
                 fontWeight: active ? 700 : 400,
               }}>

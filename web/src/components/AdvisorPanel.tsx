@@ -4,6 +4,7 @@ import type { Recommendation, Phase } from '../types'
 interface Props {
   recommendation: Recommendation | null
   phase: Phase
+  warnings?: string[]
   onAccept: () => void
   onDismiss: () => void
 }
@@ -59,15 +60,16 @@ function formatActionSummary(phase: Phase, rec: Recommendation['top_recommendati
   return ''
 }
 
-export default function AdvisorPanel({ recommendation: rec, phase, onAccept, onDismiss }: Props) {
+export default function AdvisorPanel({ recommendation: rec, phase, warnings = [], onAccept, onDismiss }: Props) {
   if (!rec) return null
 
   const summary = formatActionSummary(phase, rec.top_recommendation)
   const sections = parseRationale(rec.strategic_rationale)
+  const hasCorrected = warnings.length > 0
 
   return (
     <div style={{
-      border: '1px solid rgba(245,158,11,0.35)',
+      border: `1px solid ${hasCorrected ? 'rgba(251,146,60,0.5)' : 'rgba(245,158,11,0.35)'}`,
       borderRadius: 4,
       marginBottom: 12,
       background: 'rgba(245,158,11,0.04)',
@@ -94,6 +96,24 @@ export default function AdvisorPanel({ recommendation: rec, phase, onAccept, onD
           </button>
         </div>
       </div>
+
+      {/* Sanitization warnings */}
+      {hasCorrected && (
+        <div style={{
+          padding: '6px 12px',
+          borderBottom: '1px solid rgba(251,146,60,0.25)',
+          background: 'rgba(251,146,60,0.06)',
+        }}>
+          <div className="mono" style={{ fontSize: 9, letterSpacing: 2, color: '#fb923c', marginBottom: 4 }}>
+            ⚠ ADVISOR CORRECTION
+          </div>
+          {warnings.map((w, i) => (
+            <div key={i} style={{ fontSize: 11, color: '#fb923c99', fontFamily: 'Courier New', lineHeight: 1.5 }}>
+              · {w}
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Recommended action summary */}
       {summary && (

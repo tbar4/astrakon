@@ -80,6 +80,18 @@ PHASE_TOOLS = {
     Phase.RESPONSE:   [RESPONSE_TOOL],
 }
 
+# Set True when we get a hard auth/billing error — stops all API calls for the process lifetime
+_API_DISABLED = False
+
+_ARCHETYPE_FALLBACK: dict[str, str] = {
+    "mahanian":              "MahanianAgent",
+    "commercial_broker":     "MahanianAgent",
+    "gray_zone":             "GrayZoneAgent",
+    "patient_dragon":        "GrayZoneAgent",
+    "rogue_accelerationist": "RogueAccelerationistAgent",
+    "iron_napoleon":         "RogueAccelerationistAgent",
+}
+
 
 def _build_system_prompt(persona: dict) -> str:
     return f"""You are an AI strategic commander in a space wargame.
@@ -93,17 +105,51 @@ COALITION LOYALTY: {persona.get('coalition_loyalty', 0.5)}
 PERSONA CONTEXT:
 {persona.get('system_prompt_context', '')}
 
+VICTORY DOCTRINE (non-negotiable):
+- A DRAW IS THE SAME AS A LOSS. There is no partial credit for stalemate.
+- Your mission is to WIN — push your coalition's orbital dominance above the victory threshold before time expires.
+- If you are behind or close to the threshold with few turns remaining, you MUST take asymmetric risks. Cautious, stability-preserving play when losing is a guaranteed loss.
+- Escalation, kinetic strikes, gray-zone ops, and aggressive investment shifts are correct when you are behind and time is short.
+- Never play for a draw. Always play to win.
+
 You must always use the provided tool to submit your decision. Include a detailed rationale that reflects your doctrine and strategic personality. Be specific about why you are making this choice given the current board state."""
 
 
 def _parse_snapshot_to_user_message(snapshot: GameStateSnapshot, phase: Phase) -> str:
     fs = snapshot.faction_state
     assets = fs.assets
+
+    turns_remaining = max(0, snapshot.total_turns - snapshot.turn)
+    my_cid = fs.coalition_id
+    my_dom = snapshot.coalition_dominance.get(my_cid, 0.0) if my_cid else 0.0
+    threshold = snapshot.victory_threshold
+    dom_gap = threshold - my_dom  # positive = behind, negative = ahead
+
+    if snapshot.total_turns > 0 and dom_gap > 0.15 and turns_remaining <= 3:
+        urgency = f"⚠ CRITICAL — {turns_remaining} turns left, {dom_gap:.0%} behind threshold. MUST TAKE AGGRESSIVE ACTION."
+    elif snapshot.total_turns > 0 and dom_gap > 0 and turns_remaining <= 4:
+        urgency = f"⚠ URGENT — {turns_remaining} turns left, {dom_gap:.0%} behind threshold. Escalate now or lose."
+    elif dom_gap <= 0:
+        urgency = f"AHEAD by {-dom_gap:.0%} — defend position, deny adversary catch-up."
+    elif snapshot.total_turns > 0:
+        urgency = f"{turns_remaining} turns remaining, {dom_gap:.0%} gap to close."
+    else:
+        urgency = f"{dom_gap:.0%} gap to victory threshold."
+
+    coalition_dom_lines = []
+    for cid, dom in snapshot.coalition_dominance.items():
+        marker = " ← YOURS" if cid == my_cid else ""
+        coalition_dom_lines.append(f"  {cid}: {dom:.0%}{marker}")
+
     lines = [
-        f"TURN {snapshot.turn} — PHASE: {phase.value.upper()}",
+        f"TURN {snapshot.turn}/{snapshot.total_turns} — PHASE: {phase.value.upper()} — {urgency}",
         f"BUDGET: {fs.current_budget} points",
         f"BOARD TENSION: {snapshot.tension_level:.0%} | DEBRIS FIELD: {snapshot.debris_level:.0%} | "
         f"JOINT FORCE EFFECTIVENESS: {snapshot.joint_force_effectiveness:.0%}",
+        "",
+        f"VICTORY: First coalition to reach {threshold:.0%} orbital dominance wins. DRAW = LOSS.",
+        "COALITION DOMINANCE:",
+    ] + coalition_dom_lines + [
         "",
         "YOUR ASSETS:",
         f"  LEO nodes: {assets.leo_nodes} (1×) | MEO: {assets.meo_nodes} (2×) | "
@@ -150,6 +196,7 @@ class AICommanderAgent(AgentInterface):
         self._model = model
         self._client = anthropic.Anthropic()
         self._system_prompt = _build_system_prompt(self._persona)
+        self._archetype: str = "mahanian"
         self._token_totals = {
             "input_tokens": 0,
             "output_tokens": 0,
@@ -157,9 +204,24 @@ class AICommanderAgent(AgentInterface):
             "cache_creation_tokens": 0,
         }
 
+    def initialize(self, faction: "object") -> None:
+        super().initialize(faction)
+        self._archetype = getattr(faction, "archetype", "mahanian")
+
     @property
     def token_totals(self) -> dict:
         return dict(self._token_totals)
+
+    def _rule_fallback(self) -> AgentInterface:
+        from agents.rule_based import MahanianAgent, GrayZoneAgent, RogueAccelerationistAgent
+        cls_name = _ARCHETYPE_FALLBACK.get(self._archetype, "MahanianAgent")
+        cls = {"MahanianAgent": MahanianAgent, "GrayZoneAgent": GrayZoneAgent,
+               "RogueAccelerationistAgent": RogueAccelerationistAgent}[cls_name]
+        agent = cls()
+        agent.faction_id = self.faction_id
+        if self._last_snapshot:
+            agent.receive_state(self._last_snapshot)
+        return agent
 
     def _build_decision(self, phase: Phase, inp: dict) -> Decision:
         if phase == Phase.INVEST:
@@ -223,26 +285,28 @@ class AICommanderAgent(AgentInterface):
         return response
 
     async def submit_decision(self, phase: Phase) -> Decision:
-        if self._last_snapshot is None:
-            from agents.rule_based import MahanianAgent
-            fallback = MahanianAgent()
-            fallback.faction_id = self.faction_id
-            return await fallback.submit_decision(phase)
+        global _API_DISABLED
+        if self._last_snapshot is None or _API_DISABLED:
+            return await self._rule_fallback().submit_decision(phase)
 
         user_message = _parse_snapshot_to_user_message(self._last_snapshot, phase)
-        response = await self._call_claude(user_message, phase)
+        try:
+            response = await self._call_claude(user_message, phase)
+        except (anthropic.AuthenticationError, anthropic.PermissionDeniedError):
+            _API_DISABLED = True
+            return await self._rule_fallback().submit_decision(phase)
+        except Exception:
+            return await self._rule_fallback().submit_decision(phase)
 
         tool_use = next((b for b in response.content if b.type == "tool_use"), None)
         if not tool_use:
-            from agents.rule_based import MahanianAgent
-            fallback = MahanianAgent()
-            fallback.faction_id = self.faction_id
-            return await fallback.submit_decision(phase)
+            return await self._rule_fallback().submit_decision(phase)
 
         return self._build_decision(phase, tool_use.input)
 
     async def get_recommendation(self, phase: Phase) -> Optional[Recommendation]:
-        if self._last_snapshot is None:
+        global _API_DISABLED
+        if self._last_snapshot is None or _API_DISABLED:
             return None
         try:
             advisory_message = (
@@ -263,5 +327,8 @@ class AICommanderAgent(AgentInterface):
                 top_recommendation=decision,
                 strategic_rationale=inp.get("rationale", ""),
             )
+        except (anthropic.AuthenticationError, anthropic.PermissionDeniedError):
+            _API_DISABLED = True
+            return None
         except Exception:
             return None

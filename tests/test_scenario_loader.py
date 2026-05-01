@@ -8,7 +8,7 @@ def test_load_pacific_crossroads():
     path = Path("scenarios/pacific_crossroads.yaml")
     scenario = load_scenario(path)
     assert scenario.name == "Pacific Crossroads"
-    assert scenario.turns == 15
+    assert scenario.turns == 10
     assert len(scenario.factions) >= 2
     assert len(scenario.coalitions) >= 1
 

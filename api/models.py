@@ -64,6 +64,8 @@ class AgentConfigEntry(BaseModel):
     faction_id: str
     agent_type: str   # "web" | "rule_based" | "ai_commander"
     use_advisor: bool = False
+    archetype_override: Optional[str] = None
+    custom_invest_weights: Optional[dict] = None  # {urgency_state: {invest_key: float}}
 
 
 class CreateGameRequest(BaseModel):

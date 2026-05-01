@@ -1,14 +1,15 @@
 // web/src/components/MapTabContainer.tsx
 import { useState } from 'react'
-import type { GameState, FactionState } from '../types'
+import type { GameState, FactionState, FactionAssets } from '../types'
 import type { TurnSnapshot } from '../store/gameStore'
 import DominanceStrip from './DominanceStrip'
 import OpsTab from './OpsTab'
 import AARPanel from './AARPanel'
 import HoloOrbitalMap from './HoloOrbitalMap'
 import DeltaVGraph from './DeltaVGraph'
+import TrendsTab from './TrendsTab'
 
-type Tab = 'orbital' | 'deltav' | 'ops' | 'aar'
+type Tab = 'orbital' | 'deltav' | 'ops' | 'trends' | 'aar'
 
 interface Props {
   gameState: GameState
@@ -20,17 +21,30 @@ interface Props {
     cislunar_nodes: number; asat_kinetic: number; asat_deniable: number;
     ew_jammers: number; sda_sensors: number; relay_nodes: number; launch_capacity: number
   }>
+  factionState: FactionState
+  turn: number
+  totalTurns: number
+  tensionLevel: number
+  cumulativeAdded: Partial<Record<keyof FactionAssets, number>>
+  cumulativeDestroyed: Partial<Record<keyof FactionAssets, number>>
+  isJammed: boolean
+  targetingMode?: boolean
+  lockedFaction?: string | null
+  onFactionClick?: (factionId: string) => void
 }
 
 const TAB_LABELS: { id: Tab; label: string }[] = [
   { id: 'orbital', label: 'ORBITAL' },
   { id: 'deltav',  label: 'DELTA-V' },
   { id: 'ops',     label: 'OPS' },
+  { id: 'trends',  label: 'TRENDS' },
   { id: 'aar',     label: 'AAR' },
 ]
 
 export default function MapTabContainer({
   gameState, coalitionDominance, turnHistory, prevFactionStates, humanAdversaryEstimates,
+  factionState, turn, totalTurns, tensionLevel, cumulativeAdded, cumulativeDestroyed, isJammed,
+  targetingMode, lockedFaction, onFactionClick,
 }: Props) {
   const [activeTab, setActiveTab] = useState<Tab>('orbital')
   const [selectedShell, setSelectedShell] = useState<string | null>(null)
@@ -45,10 +59,10 @@ export default function MapTabContainer({
       }}>
         {TAB_LABELS.map(({ id, label }) => (
           <button key={id} onClick={() => setActiveTab(id)} style={{
-            fontFamily: 'Courier New', fontSize: 10, letterSpacing: 2,
+            fontFamily: 'Courier New', fontSize: 12, letterSpacing: 2,
             padding: '5px 14px', border: 'none', cursor: 'pointer',
             borderBottom: activeTab === id ? '2px solid #00d4ff' : '2px solid transparent',
-            color: activeTab === id ? '#00d4ff' : '#334155',
+            color: activeTab === id ? '#00d4ff' : '#64748b',
             background: 'none',
           }}>
             {label}
@@ -67,6 +81,9 @@ export default function MapTabContainer({
             selectedFaction={selectedFaction}
             onShellHover={setSelectedShell}
             onFactionHover={setSelectedFaction}
+            targetingMode={targetingMode}
+            lockedFaction={lockedFaction}
+            onFactionClick={onFactionClick}
           />
         )}
         {activeTab === 'deltav' && (
@@ -83,6 +100,19 @@ export default function MapTabContainer({
           <OpsTab
             gameState={gameState}
             coalitionDominance={coalitionDominance}
+            turnHistory={turnHistory}
+            factionState={factionState}
+            turn={turn}
+            totalTurns={totalTurns}
+            tensionLevel={tensionLevel}
+            cumulativeAdded={cumulativeAdded}
+            cumulativeDestroyed={cumulativeDestroyed}
+            isJammed={isJammed}
+          />
+        )}
+        {activeTab === 'trends' && (
+          <TrendsTab
+            gameState={gameState}
             turnHistory={turnHistory}
           />
         )}

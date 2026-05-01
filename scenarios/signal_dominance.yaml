@@ -1,0 +1,93 @@
+name: "Signal Dominance"
+description: "Competition to control GNSS navigation, precision timing, and satellite communications in the Indo-Pacific battlespace, 2033"
+turns: 12
+turn_represents: "2 months"
+
+coalitions:
+  nato_gps:
+    member_ids: [ussf_gps, eu_galileo]
+    shared_intel: true
+    hegemony_pool: true
+  sino_gnss:
+    member_ids: [cnsa_beidou, vks_glonass]
+    shared_intel: true
+    hegemony_pool: false
+
+factions:
+  - faction_id: ussf_gps
+    name: "USSF GPS Command"
+    archetype: mahanian
+    agent_type: "human+advisor"
+    budget_per_turn: 100
+    coalition_id: nato_gps
+    coalition_loyalty: 0.9
+    starting_assets:
+      leo_nodes: 15
+      meo_nodes: 8
+      geo_nodes: 3
+      sda_sensors: 14
+      relay_nodes: 4
+      launch_capacity: 3
+
+  - faction_id: eu_galileo
+    name: "EU Galileo Consortium"
+    archetype: commercial_broker
+    agent_type: ai_commander
+    budget_per_turn: 70
+    coalition_id: nato_gps
+    coalition_loyalty: 0.7
+    starting_assets:
+      leo_nodes: 10
+      meo_nodes: 10
+      geo_nodes: 2
+      sda_sensors: 8
+      launch_capacity: 3
+
+  - faction_id: cnsa_beidou
+    name: "CNSA BeiDou Command"
+    archetype: gray_zone
+    agent_type: ai_commander
+    budget_per_turn: 90
+    coalition_id: sino_gnss
+    coalition_loyalty: 0.85
+    starting_assets:
+      leo_nodes: 12
+      meo_nodes: 10
+      geo_nodes: 2
+      asat_deniable: 5
+      ew_jammers: 3
+      sda_sensors: 10
+      launch_capacity: 3
+
+  - faction_id: vks_glonass
+    name: "VKS GLONASS Forces"
+    archetype: rogue_accelerationist
+    agent_type: ai_commander
+    budget_per_turn: 50
+    coalition_id: sino_gnss
+    coalition_loyalty: 0.65
+    starting_assets:
+      leo_nodes: 8
+      meo_nodes: 9
+      geo_nodes: 2
+      asat_kinetic: 6
+      asat_deniable: 3
+      ew_jammers: 5
+      sda_sensors: 5
+      launch_capacity: 2
+
+victory:
+  coalition_orbital_dominance: 0.65
+  individual_conditions_required: true
+  individual_conditions:
+    ussf_gps:
+      military_deterrence_score: 50
+    eu_galileo:
+      commercial_market_share: 0.30
+    cnsa_beidou:
+      orbital_dominance_score: 0.38
+    vks_glonass:
+      disruption_score: 25
+
+crisis_events:
+  library: default_2030

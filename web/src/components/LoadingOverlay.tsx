@@ -1,6 +1,11 @@
 import { useState, useEffect } from 'react'
 import { LOADING_QUOTES } from '../data/loadingQuotes'
 
+interface Props {
+  loading: boolean
+  onDismiss: () => void
+}
+
 function pickNext(currentIdx: number): number {
   const currentAuthor = LOADING_QUOTES[currentIdx].author
   const candidates = LOADING_QUOTES
@@ -10,15 +15,12 @@ function pickNext(currentIdx: number): number {
   return pool[Math.floor(Math.random() * pool.length)]
 }
 
-export default function LoadingOverlay() {
+export default function LoadingOverlay({ loading, onDismiss }: Props) {
   const [quoteIdx, setQuoteIdx] = useState(() => Math.floor(Math.random() * LOADING_QUOTES.length))
   const [fading, setFading] = useState(true)
 
   useEffect(() => {
-    // Initial fade in
     const initial = setTimeout(() => setFading(false), 50)
-
-    // Rotate every 15s: fade out → swap → fade in
     const interval = setInterval(() => {
       setFading(true)
       setTimeout(() => {
@@ -26,11 +28,7 @@ export default function LoadingOverlay() {
         setFading(false)
       }, 600)
     }, 15000)
-
-    return () => {
-      clearTimeout(initial)
-      clearInterval(interval)
-    }
+    return () => { clearTimeout(initial); clearInterval(interval) }
   }, [])
 
   const quote = LOADING_QUOTES[quoteIdx]
@@ -43,22 +41,27 @@ export default function LoadingOverlay() {
       alignItems: 'center', justifyContent: 'center',
       zIndex: 100, gap: 20,
     }}>
-      <div className="mono" style={{ color: '#00d4ff', fontSize: 13, letterSpacing: 4 }}>
-        AI COMMANDERS DELIBERATING
+      <div className="mono" style={{ color: loading ? '#00d4ff' : '#00ff88', fontSize: 13, letterSpacing: 4, transition: 'color 0.4s ease' }}>
+        {loading ? 'AI COMMANDERS DELIBERATING' : 'DELIBERATION COMPLETE'}
       </div>
 
-      <div style={{
-        width: 200, height: 2,
-        background: 'rgba(0,212,255,0.1)',
-        overflow: 'hidden', borderRadius: 1,
-      }}>
-        <div style={{
-          height: '100%', width: '40%',
-          background: '#00d4ff',
-          boxShadow: '0 0 8px #00d4ff',
-          animation: 'scan 1.5s linear infinite',
-        }} />
-      </div>
+      {loading ? (
+        <div style={{ width: 200, height: 2, background: 'rgba(0,212,255,0.1)', overflow: 'hidden', borderRadius: 1 }}>
+          <div style={{
+            height: '100%', width: '40%',
+            background: '#00d4ff', boxShadow: '0 0 8px #00d4ff',
+            animation: 'scan 1.5s linear infinite',
+          }} />
+        </div>
+      ) : (
+        <button
+          className="btn-primary"
+          onClick={onDismiss}
+          style={{ fontSize: 11, padding: '6px 28px', letterSpacing: 3, borderColor: '#00ff88', color: '#00ff88' }}
+        >
+          [ CONTINUE ]
+        </button>
+      )}
 
       <div style={{
         maxWidth: 480, textAlign: 'center',

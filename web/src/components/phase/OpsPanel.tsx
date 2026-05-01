@@ -1,5 +1,5 @@
 // web/src/components/phase/OpsPanel.tsx
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 
 interface Props {
   factionNames: Record<string, string>
@@ -7,6 +7,8 @@ interface Props {
   asatKinetic: number
   onSubmit: (decision: Record<string, unknown>) => void
   disabled: boolean
+  mapTarget?: string | null
+  onClearMapTarget?: () => void
 }
 
 const ACTION_TYPES = [
@@ -25,13 +27,18 @@ const MISSIONS = [
 
 type ActionKey = typeof ACTION_TYPES[number]['key']
 
-export default function OpsPanel({ factionNames, humanFactionId, asatKinetic, onSubmit, disabled }: Props) {
+export default function OpsPanel({ factionNames, humanFactionId, asatKinetic, onSubmit, disabled, mapTarget, onClearMapTarget }: Props) {
   const [actionType, setActionType] = useState<ActionKey>('task_assets')
   const [target, setTarget] = useState('')
   const [mission, setMission] = useState('sda_sweep')
   const [rationale, setRationale] = useState('')
 
+  useEffect(() => {
+    if (mapTarget != null) setTarget(mapTarget)
+  }, [mapTarget])
+
   const otherFactions = Object.entries(factionNames).filter(([fid]) => fid !== humanFactionId)
+  const effectiveTarget = mapTarget ?? target
 
   function handleSubmit() {
     const params: Record<string, string> = {}
@@ -39,7 +46,7 @@ export default function OpsPanel({ factionNames, humanFactionId, asatKinetic, on
     onSubmit({
       operations: [{
         action_type: actionType,
-        target_faction: target || undefined,
+        target_faction: effectiveTarget || undefined,
         parameters: params,
         rationale,
       }],
@@ -51,7 +58,7 @@ export default function OpsPanel({ factionNames, humanFactionId, asatKinetic, on
       <div className="panel-title">◆ OPERATIONS PHASE</div>
 
       <div style={{ marginBottom: 12 }}>
-        <div className="panel-title" style={{ fontSize: 9 }}>ACTION TYPE</div>
+        <div className="panel-title" style={{ fontSize: 11 }}>ACTION TYPE</div>
         {ACTION_TYPES.map(({ key, label, desc }) => (
           <label key={key} style={{
             display: 'flex', alignItems: 'flex-start', gap: 8,
@@ -62,11 +69,11 @@ export default function OpsPanel({ factionNames, humanFactionId, asatKinetic, on
               checked={actionType === key}
               onChange={() => setActionType(key)}
               disabled={disabled}
-              style={{ marginTop: 2, accentColor: '#00d4ff' }}
+              style={{ marginTop: 3, accentColor: '#00d4ff' }}
             />
             <div>
-              <div style={{ fontSize: 12, color: '#e2e8f0' }}>{label}</div>
-              <div style={{ fontSize: 10, color: '#475569' }}>{desc}</div>
+              <div style={{ fontSize: 13, color: '#e2e8f0' }}>{label}</div>
+              <div style={{ fontSize: 12, color: '#475569' }}>{desc}</div>
             </div>
           </label>
         ))}
@@ -74,7 +81,7 @@ export default function OpsPanel({ factionNames, humanFactionId, asatKinetic, on
 
       {actionType === 'task_assets' && (
         <div style={{ marginBottom: 12 }}>
-          <div className="panel-title" style={{ fontSize: 9 }}>MISSION</div>
+          <div className="panel-title" style={{ fontSize: 11 }}>MISSION</div>
           {MISSIONS.map(({ key, label }) => {
             const noAsats = key === 'intercept' && asatKinetic === 0
             return (
@@ -86,7 +93,7 @@ export default function OpsPanel({ factionNames, humanFactionId, asatKinetic, on
                   disabled={disabled || noAsats}
                   style={{ accentColor: '#00d4ff' }}
                 />
-                <span style={{ fontSize: 11, color: '#94a3b8' }}>
+                <span style={{ fontSize: 13, color: '#94a3b8' }}>
                   {label}{noAsats ? ' — no kinetic ASATs' : ''}
                 </span>
               </label>
@@ -96,26 +103,47 @@ export default function OpsPanel({ factionNames, humanFactionId, asatKinetic, on
       )}
 
       <div style={{ marginBottom: 12 }}>
-        <div className="panel-title" style={{ fontSize: 9 }}>TARGET FACTION (optional)</div>
-        <select
-          value={target}
-          onChange={(e) => setTarget(e.target.value)}
-          disabled={disabled}
-          style={{
-            width: '100%', background: '#020b18', border: '1px solid #00d4ff22',
-            color: '#94a3b8', padding: '6px 8px', fontFamily: 'Courier New',
-            fontSize: 11, borderRadius: 2,
-          }}
-        >
-          <option value="">— none —</option>
-          {otherFactions.map(([fid, name]) => (
-            <option key={fid} value={fid}>{name}</option>
-          ))}
-        </select>
+        <div className="panel-title" style={{ fontSize: 11 }}>
+          TARGET FACTION {!mapTarget && <span style={{ color: '#334155' }}>(optional — or click map)</span>}
+        </div>
+        {mapTarget ? (
+          <div style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            padding: '6px 8px', border: '1px solid #f59e0b66', borderRadius: 2,
+            background: 'rgba(245,158,11,0.06)',
+          }}>
+            <span style={{ fontFamily: 'Courier New', fontSize: 13, color: '#f59e0b', letterSpacing: 1 }}>
+              ◎ {factionNames[mapTarget] ?? mapTarget}
+            </span>
+            <button
+              onClick={() => { onClearMapTarget?.(); setTarget('') }}
+              disabled={disabled}
+              style={{ background: 'none', border: 'none', color: '#64748b', cursor: 'pointer', fontSize: 14, padding: '0 4px', lineHeight: 1 }}
+            >
+              ×
+            </button>
+          </div>
+        ) : (
+          <select
+            value={target}
+            onChange={(e) => setTarget(e.target.value)}
+            disabled={disabled}
+            style={{
+              width: '100%', background: '#020b18', border: '1px solid #00d4ff22',
+              color: '#94a3b8', padding: '6px 8px', fontFamily: 'Courier New',
+              fontSize: 13, borderRadius: 2,
+            }}
+          >
+            <option value="">— none —</option>
+            {otherFactions.map(([fid, name]) => (
+              <option key={fid} value={fid}>{name}</option>
+            ))}
+          </select>
+        )}
       </div>
 
       <div style={{ marginBottom: 12 }}>
-        <div className="panel-title" style={{ fontSize: 9 }}>RATIONALE</div>
+        <div className="panel-title" style={{ fontSize: 11 }}>RATIONALE</div>
         <textarea
           value={rationale}
           onChange={(e) => setRationale(e.target.value)}
@@ -124,7 +152,7 @@ export default function OpsPanel({ factionNames, humanFactionId, asatKinetic, on
           style={{
             width: '100%', background: '#020b18', border: '1px solid #00d4ff22',
             color: '#94a3b8', padding: '6px 8px', fontFamily: 'system-ui',
-            fontSize: 12, resize: 'vertical', minHeight: 60, borderRadius: 2,
+            fontSize: 13, resize: 'vertical', minHeight: 60, borderRadius: 2,
             boxSizing: 'border-box',
           }}
         />

@@ -59,21 +59,29 @@ def test_snapshot(test_faction):
     )
 
 
-async def test_mahanian_agent_invests_in_sda(test_faction, test_snapshot):
+async def test_mahanian_agent_invests_in_high_orbit_when_critical(test_faction, test_snapshot):
+    # snapshot has total_turns=0, coalition_dominance={} → urgency=critical → MEO/GEO/Cislunar priority
     agent = MahanianAgent()
     agent.initialize(test_faction)
     agent.receive_state(test_snapshot)
     decision = await agent.submit_decision(Phase.INVEST)
     assert decision.investment is not None
-    assert decision.investment.r_and_d + decision.investment.constellation >= 0.4
+    high_orbit = (
+        decision.investment.geo_deployment
+        + decision.investment.meo_deployment
+        + decision.investment.cislunar_deployment
+    )
+    assert high_orbit >= 0.4, "critical urgency should prioritize MEO/GEO/Cislunar"
 
 
 async def test_max_constellation_agent(test_faction, test_snapshot):
+    # MaxConstellationAgent is now RogueAccelerationistAgent — kinetic-first doctrine
     agent = MaxConstellationAgent()
     agent.initialize(test_faction)
     agent.receive_state(test_snapshot)
     decision = await agent.submit_decision(Phase.INVEST)
-    assert decision.investment.constellation >= 0.6
+    assert decision.investment is not None
+    assert decision.investment.kinetic_weapons >= 0.25, "rogue agent should invest heavily in kinetic weapons"
 
 
 async def test_rule_based_returns_valid_decision_all_phases(test_faction, test_snapshot):

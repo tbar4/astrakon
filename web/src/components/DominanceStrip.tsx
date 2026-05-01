@@ -50,7 +50,7 @@ export default function DominanceStrip({ coalitionDominance, turnHistory, coalit
           </div>
         )
       })}
-      <span style={{ fontFamily: 'Courier New', fontSize: 8, color: '#334155', letterSpacing: 1, whiteSpace: 'nowrap' }}>
+      <span style={{ fontFamily: 'Courier New', fontSize: 8, color: '#64748b', letterSpacing: 1, whiteSpace: 'nowrap' }}>
         WIN: {(victoryThreshold * 100).toFixed(0)}%
       </span>
     </div>

@@ -174,6 +174,9 @@ class GameStateSnapshot(BaseModel):
         default_factory=lambda: {"leo": True, "meo": True, "geo": True, "cislunar": True}
     )
     escalation_rung: int = 0               # 0–5 named escalation level
+    total_turns: int = 0
+    coalition_dominance: dict[str, float] = Field(default_factory=dict)
+    victory_threshold: float = 0.65
 
 
 class CrisisEvent(BaseModel):

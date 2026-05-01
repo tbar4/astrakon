@@ -19,6 +19,7 @@ export default function SpectatePage() {
   const navigate = useNavigate()
 
   const [gameState, setGameState] = useState<GameState | null>(null)
+  const [prevFactionStates, setPrevFactionStates] = useState<Record<string, import('../types').FactionState> | null>(null)
   const [coalitionDominance, setCoalitionDominance] = useState<Record<string, number>>({})
   const [turnHistory, setTurnHistory] = useState<TurnSnapshot[]>([])
   const [paused, setPaused] = useState(false)
@@ -37,12 +38,26 @@ export default function SpectatePage() {
         const res = await advance(sessionId)
         setTurnHistory((prev) => {
           const isTurnBoundary = res.state.turn > (gameState?.turn ?? 0)
-          if (isTurnBoundary) {
-            return [...prev, { turn: gameState.turn, dominance: coalitionDominance, tension: gameState.tension_level }]
+          if (isTurnBoundary && gameState) {
+            const allFs = Object.values(gameState.faction_states)
+            const shellTotals = {
+              leo: allFs.reduce((s, f) => s + f.assets.leo_nodes, 0),
+              meo: allFs.reduce((s, f) => s + f.assets.meo_nodes, 0),
+              geo: allFs.reduce((s, f) => s + f.assets.geo_nodes, 0),
+              cis: allFs.reduce((s, f) => s + f.assets.cislunar_nodes, 0),
+            }
+            const factionTotals: Record<string, number> = {}
+            for (const [fid, fs] of Object.entries(gameState.faction_states)) {
+              factionTotals[fid] = fs.assets.leo_nodes + fs.assets.meo_nodes + fs.assets.geo_nodes + fs.assets.cislunar_nodes
+            }
+            return [...prev, { turn: gameState.turn, dominance: coalitionDominance, tension: gameState.tension_level, shellTotals, factionTotals }] as TurnSnapshot[]
           }
           return prev
         })
-        setGameState(res.state)
+        setGameState((prev) => {
+          if (prev && res.state.turn > prev.turn) setPrevFactionStates(prev.faction_states)
+          return res.state
+        })
         setCoalitionDominance(res.coalition_dominance)
       } catch (e) {
         setError(String(e))
@@ -76,7 +91,7 @@ export default function SpectatePage() {
           <div style={{ fontSize: 12, color: '#64748b', fontStyle: 'italic', lineHeight: 1.7, marginBottom: 10, fontFamily: 'Georgia, serif' }}>
             "{q.text}"
           </div>
-          <div className="mono" style={{ fontSize: 9, color: '#334155', letterSpacing: 1 }}>— {q.author}</div>
+          <div className="mono" style={{ fontSize: 9, color: '#64748b', letterSpacing: 1 }}>— {q.author}</div>
           <div className="mono" style={{ fontSize: 9, color: '#1e3a4a', letterSpacing: 1, marginTop: 2 }}>{q.source}</div>
         </div>
         <style>{`@keyframes scan { 0% { transform: translateX(-100%); } 100% { transform: translateX(600%); } }`}</style>
@@ -110,17 +125,17 @@ export default function SpectatePage() {
         display: 'flex', alignItems: 'center', gap: 16, background: '#020b18', flexShrink: 0,
       }}>
         <span className="mono" style={{ color: '#00d4ff', fontSize: 13, letterSpacing: 4 }}>◆ ASTRAKON</span>
-        <span className="mono" style={{ color: '#f59e0b', fontSize: 10, letterSpacing: 2 }}>SPECTATOR</span>
-        <span className="mono" style={{ color: '#334155', fontSize: 10 }}>·</span>
-        <span className="mono" style={{ color: '#64748b', fontSize: 10 }}>
+        <span className="mono" style={{ color: '#f59e0b', fontSize: 12, letterSpacing: 2 }}>SPECTATOR</span>
+        <span className="mono" style={{ color: '#475569', fontSize: 12 }}>·</span>
+        <span className="mono" style={{ color: '#64748b', fontSize: 12 }}>
           TURN {gameState.turn}/{gameState.total_turns}
         </span>
-        <span className="mono" style={{ color: '#334155', fontSize: 10 }}>·</span>
-        <span className="mono" style={{ color: '#00d4ff88', fontSize: 10, letterSpacing: 2 }}>
+        <span className="mono" style={{ color: '#475569', fontSize: 12 }}>·</span>
+        <span className="mono" style={{ color: '#00d4ff88', fontSize: 12, letterSpacing: 2 }}>
           {(gameState.current_phase as string).toUpperCase()} PHASE
         </span>
         <span style={{ flex: 1 }} />
-        <span className="mono" style={{ color: '#64748b', fontSize: 10 }}>{gameState.scenario_name}</span>
+        <span className="mono" style={{ color: '#64748b', fontSize: 11 }}>{gameState.scenario_name}</span>
         {Object.keys(gameState.token_totals ?? {}).length > 0 && (() => {
           const totals = gameState.token_totals ?? {}
           const totalIn = Object.values(totals).reduce((s, t) => s + (t.input_tokens ?? 0), 0)
@@ -128,7 +143,7 @@ export default function SpectatePage() {
           const total = totalIn + totalOut
           const fmt = total >= 1000 ? `${(total / 1000).toFixed(1)}K` : String(total)
           return (
-            <span className="mono" style={{ color: '#475569', fontSize: 9, letterSpacing: 1 }} title={`AI tokens: ${totalIn.toLocaleString()} in / ${totalOut.toLocaleString()} out`}>
+            <span className="mono" style={{ color: '#475569', fontSize: 11, letterSpacing: 1 }} title={`AI tokens: ${totalIn.toLocaleString()} in / ${totalOut.toLocaleString()} out`}>
               ⬡ {fmt} tok
             </span>
           )
@@ -138,18 +153,18 @@ export default function SpectatePage() {
         <div style={{ display: 'flex', gap: 4 }}>
           {SPEEDS.map((s, i) => (
             <button key={i} className="btn-primary" onClick={() => setSpeedIdx(i)}
-              style={{ fontSize: 10, padding: '2px 8px', borderColor: i === speedIdx ? '#00d4ff' : '#334155', color: i === speedIdx ? '#00d4ff' : '#334155' }}>
+              style={{ fontSize: 11, padding: '2px 8px', borderColor: i === speedIdx ? '#00d4ff' : '#334155', color: i === speedIdx ? '#00d4ff' : '#64748b' }}>
               {s.label}
             </button>
           ))}
         </div>
 
         <button className="btn-primary" onClick={() => setPaused((p) => !p)}
-          style={{ fontSize: 10, padding: '2px 10px', borderColor: paused ? '#00ff88' : '#f59e0b', color: paused ? '#00ff88' : '#f59e0b' }}>
+          style={{ fontSize: 11, padding: '2px 10px', borderColor: paused ? '#00ff88' : '#f59e0b', color: paused ? '#00ff88' : '#f59e0b' }}>
           {paused ? '▶ RESUME' : '⏸ PAUSE'}
         </button>
         <button className="btn-primary" onClick={() => navigate('/')}
-          style={{ fontSize: 10, padding: '2px 10px', borderColor: '#334155', color: '#64748b' }}>
+          style={{ fontSize: 11, padding: '2px 10px', borderColor: '#334155', color: '#64748b' }}>
           ← MENU
         </button>
       </div>
@@ -171,8 +186,15 @@ export default function SpectatePage() {
             gameState={gameState}
             coalitionDominance={coalitionDominance}
             turnHistory={turnHistory}
-            prevFactionStates={null}
+            prevFactionStates={prevFactionStates}
             humanAdversaryEstimates={{}}
+            factionState={Object.values(gameState.faction_states)[0]!}
+            turn={gameState.turn}
+            totalTurns={gameState.total_turns}
+            tensionLevel={gameState.tension_level}
+            cumulativeAdded={{}}
+            cumulativeDestroyed={{}}
+            isJammed={false}
           />
         </div>
 

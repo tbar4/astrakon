@@ -75,7 +75,7 @@ export default function TutorialPanel({ phase, turn }: Props) {
           ◆ TUTORIAL — {step.title}
         </span>
         <button onClick={dismissStep}
-          style={{ background: 'none', border: 'none', color: '#334155', fontSize: 11, cursor: 'pointer', fontFamily: 'Courier New' }}>
+          style={{ background: 'none', border: 'none', color: '#64748b', fontSize: 11, cursor: 'pointer', fontFamily: 'Courier New' }}>
           ✕
         </button>
       </div>
@@ -89,7 +89,7 @@ export default function TutorialPanel({ phase, turn }: Props) {
       </div>
       <div style={{ marginTop: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <button onClick={dismissForever}
-          style={{ background: 'none', border: 'none', color: '#334155', fontSize: 10, cursor: 'pointer', fontFamily: 'Courier New', textDecoration: 'underline' }}>
+          style={{ background: 'none', border: 'none', color: '#64748b', fontSize: 10, cursor: 'pointer', fontFamily: 'Courier New', textDecoration: 'underline' }}>
           skip tutorial
         </button>
         <button onClick={dismissStep}

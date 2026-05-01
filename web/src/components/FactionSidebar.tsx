@@ -49,12 +49,12 @@ export default function FactionSidebar({ factionState: fs, turn, totalTurns, ten
         marginBottom: 10,
       }}>
         {/* Column headers */}
-        <div style={{ fontSize: 9, color: '#334155', paddingBottom: 4 }} />
-        <div style={{ fontSize: 9, color: '#334155', textAlign: 'right', paddingBottom: 4, ...MONO }}>NOW</div>
+        <div style={{ fontSize: 9, color: '#64748b', paddingBottom: 4 }} />
+        <div style={{ fontSize: 9, color: '#64748b', textAlign: 'right', paddingBottom: 4, ...MONO }}>NOW</div>
         <div style={{ fontSize: 9, color: '#00ff8866', textAlign: 'right', paddingBottom: 4, ...MONO }}>+ADD</div>
         <div style={{ fontSize: 9, color: '#ff449966', textAlign: 'right', paddingBottom: 4, ...MONO }}>−DST</div>
         <div style={{ fontSize: 9, color: '#f59e0b66', textAlign: 'center', paddingBottom: 4, ...MONO }}>JAM</div>
-        <div style={{ fontSize: 9, color: '#334155', textAlign: 'right', paddingBottom: 4, ...MONO }}>WT</div>
+        <div style={{ fontSize: 9, color: '#64748b', textAlign: 'right', paddingBottom: 4, ...MONO }}>WT</div>
 
         {/* Asset rows */}
         {ASSET_ROWS.map(({ label, key, weight, jammable }) => {
@@ -65,16 +65,16 @@ export default function FactionSidebar({ factionState: fs, turn, totalTurns, ten
             <React.Fragment key={key}>
               <div style={{ ...CELL, color: '#64748b', fontSize: 11 }}>{label}</div>
               <div style={{ ...CELL, ...MONO, color: '#e2e8f0', fontSize: 11, textAlign: 'right' }}>{fs.assets[key]}</div>
-              <div style={{ ...CELL, ...MONO, color: added > 0 ? '#00ff88' : '#334155', fontSize: 10, textAlign: 'right' }}>
+              <div style={{ ...CELL, ...MONO, color: added > 0 ? '#00ff88' : '#475569', fontSize: 10, textAlign: 'right' }}>
                 {added > 0 ? `+${added}` : '—'}
               </div>
-              <div style={{ ...CELL, ...MONO, color: destroyed > 0 ? '#ff4499' : '#334155', fontSize: 10, textAlign: 'right' }}>
+              <div style={{ ...CELL, ...MONO, color: destroyed > 0 ? '#ff4499' : '#475569', fontSize: 10, textAlign: 'right' }}>
                 {destroyed > 0 ? `-${destroyed}` : '—'}
               </div>
-              <div style={{ ...CELL, ...MONO, color: jammed ? '#f59e0b' : '#334155', fontSize: 10, textAlign: 'center' }}>
+              <div style={{ ...CELL, ...MONO, color: jammed ? '#f59e0b' : '#475569', fontSize: 10, textAlign: 'center' }}>
                 {jammed ? '◆' : '—'}
               </div>
-              <div style={{ ...CELL, ...MONO, color: '#334155', fontSize: 10, textAlign: 'right' }}>{weight}</div>
+              <div style={{ ...CELL, ...MONO, color: '#475569', fontSize: 10, textAlign: 'right' }}>{weight}</div>
             </React.Fragment>
           )
         })}

@@ -23,6 +23,19 @@ def _load_scenario(scenario_id: str) -> Scenario:
     return load_scenario(_SCENARIOS_DIR / f"{scenario_id}.yaml")
 
 
+def _rule_agent_for_archetype(archetype: str) -> AgentInterface:
+    from agents.rule_based import MahanianAgent, GrayZoneAgent, RogueAccelerationistAgent, CommercialBrokerAgent
+    mapping: dict[str, type] = {
+        "mahanian":              MahanianAgent,
+        "commercial_broker":     CommercialBrokerAgent,
+        "gray_zone":             GrayZoneAgent,
+        "patient_dragon":        GrayZoneAgent,
+        "rogue_accelerationist": RogueAccelerationistAgent,
+        "iron_napoleon":         RogueAccelerationistAgent,
+    }
+    return mapping.get(archetype, MahanianAgent)()
+
+
 def _make_agents(scenario: Scenario, agent_config: list[dict]) -> dict[str, AgentInterface]:
     cfg_map = {c["faction_id"]: c for c in agent_config}
     agents = {}
@@ -41,7 +54,13 @@ def _make_agents(scenario: Scenario, agent_config: list[dict]) -> dict[str, Agen
             yaml.dump(load_archetype(faction.archetype), buf)
             agent = AICommanderAgent(persona_yaml=buf.getvalue())
         else:
-            agent = MahanianAgent()
+            archetype = cfg.get("archetype_override") or faction.archetype
+            custom_weights = cfg.get("custom_invest_weights")
+            if custom_weights:
+                from agents.rule_based import ParameterizedRuleAgent
+                agent = ParameterizedRuleAgent(base_archetype=archetype, invest_weights=custom_weights)
+            else:
+                agent = _rule_agent_for_archetype(archetype)
         agent.initialize(faction)
         agents[faction.faction_id] = agent
     return agents

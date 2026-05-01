@@ -22,9 +22,9 @@ factions:
     coalition_id: artemis
     coalition_loyalty: 0.85
     starting_assets:
-      leo_nodes: 30
-      meo_nodes: 8
-      geo_nodes: 4
+      leo_nodes: 20
+      meo_nodes: 6
+      geo_nodes: 3
       cislunar_nodes: 2
       sda_sensors: 14
       relay_nodes: 3
@@ -38,7 +38,7 @@ factions:
     coalition_id: artemis
     coalition_loyalty: 0.65
     starting_assets:
-      leo_nodes: 55
+      leo_nodes: 22
       meo_nodes: 4
       geo_nodes: 2
       cislunar_nodes: 1
@@ -53,10 +53,10 @@ factions:
     coalition_id: ascent
     coalition_loyalty: 0.9
     starting_assets:
-      leo_nodes: 30
-      meo_nodes: 6
-      geo_nodes: 3
-      cislunar_nodes: 2
+      leo_nodes: 28
+      meo_nodes: 8
+      geo_nodes: 4
+      cislunar_nodes: 3
       asat_kinetic: 4
       asat_deniable: 6
       sda_sensors: 10
@@ -70,7 +70,8 @@ factions:
     coalition_id: ascent
     coalition_loyalty: 0.55
     starting_assets:
-      leo_nodes: 10
+      leo_nodes: 12
+      meo_nodes: 2
       cislunar_nodes: 1
       asat_kinetic: 5
       asat_deniable: 3
@@ -79,17 +80,17 @@ factions:
       launch_capacity: 1
 
 victory:
-  coalition_orbital_dominance: 0.72
+  coalition_orbital_dominance: 0.65
   individual_conditions_required: true
   individual_conditions:
     nasa_ussf:
-      military_deterrence_score: 60
+      military_deterrence_score: 50
     esa_consortium:
       commercial_market_share: 0.30
     cnsa_pla:
-      orbital_dominance_score: 0.40
+      orbital_dominance_score: 0.42
     roscosmos:
-      disruption_score: 40
+      disruption_score: 25
 
 crisis_events:
   library: default_2030

@@ -150,6 +150,8 @@ export interface AgentConfig {
   faction_id: string
   agent_type: 'web' | 'rule_based' | 'ai_commander'
   use_advisor: boolean
+  archetype_override?: string
+  custom_invest_weights?: Record<string, Record<string, number>>
 }
 
 export interface InvestmentDecision {
