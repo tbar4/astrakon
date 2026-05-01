@@ -277,9 +277,12 @@ class GameReferee:
             if other_fs.coalition_id == coalition_id:
                 ally_states[fid] = other_fs.model_copy(deep=True)
             else:
+                from engine.tech_tree import apply_passive_effects
+                adv_tech_mods = apply_passive_effects(other_fs, "adversary_estimate")
                 adversary_estimates[fid] = self.sim.sda_filter.filter(
                     adversary_assets=other_fs.assets,
                     observer_sda_level=effective_sda,
+                    adversary_tech_mods=adv_tech_mods,
                 ).model_dump()
 
         # Detect incoming kinetic approaches if SDA sufficient
@@ -379,8 +382,18 @@ class GameReferee:
         """Resolve investment decisions (dict values may be Decision objects or JSON strings)."""
         from engine.tech_tree import NODE_BY_ID, prereqs_met
         # Apply debris disruption at start of invest phase
+        kessler_shells = {
+            shell for shell, sev in self._debris_fields.items()
+            if sev >= self.sim.debris_engine.KESSLER_THRESHOLD
+        }
+        cascade_immune = {
+            fid for fid, fs in self.faction_states.items()
+            if "rog_cascade" in fs.unlocked_techs
+        }
         self.faction_states, debris_log = self.sim.debris_engine.apply_debris_effects(
-            self.faction_states, self._debris_fields
+            self.faction_states, self._debris_fields,
+            cascade_immune_factions=cascade_immune,
+            kessler_shells=kessler_shells,
         )
         self._turn_log.extend(debris_log)
         from engine.state import Decision
@@ -393,6 +406,7 @@ class GameReferee:
                     budget=fs.current_budget,
                     allocation=decision.investment,
                     turn=turn,
+                    unlocked_techs=list(fs.unlocked_techs),
                 )
                 fs.assets.leo_nodes += result.immediate_assets.leo_nodes
                 fs.assets.meo_nodes += result.immediate_assets.meo_nodes

@@ -25,8 +25,17 @@ class InvestmentResolver:
 
     def resolve(
         self, faction_id: str, budget: int,
-        allocation: InvestmentAllocation, turn: int
+        allocation: InvestmentAllocation, turn: int,
+        unlocked_techs: list[str] | None = None,
     ) -> InvestmentResult:
+        from engine.tech_tree import apply_passive_effects as _ape
+        from engine.state import FactionState as _FS, FactionAssets as _FA
+        unlocked_techs = unlocked_techs or []
+        _mock_fs = _FS(
+            faction_id=faction_id, name="", budget_per_turn=0, current_budget=0,
+            assets=_FA(), unlocked_techs=unlocked_techs,
+        )
+
         deferred = []
         spent = 0
         leo_nodes = 0
@@ -40,9 +49,10 @@ class InvestmentResolver:
 
         if allocation.constellation > 0:
             pts = int(budget * allocation.constellation)
-            nodes = pts // self.CONSTELLATION_NODE_COST
+            cost_divisor = _ape(_mock_fs, "leo_deploy")["cost_divisor"]
+            nodes = pts // cost_divisor
             leo_nodes += nodes
-            spent += nodes * self.CONSTELLATION_NODE_COST
+            spent += nodes * cost_divisor
 
         if allocation.meo_deployment > 0:
             pts = int(budget * allocation.meo_deployment)
@@ -52,12 +62,14 @@ class InvestmentResolver:
 
         if allocation.geo_deployment > 0:
             pts = int(budget * allocation.geo_deployment)
+            pts = int(pts * _ape(_mock_fs, "geo_deploy")["pts_multiplier"])
             nodes = pts // self.GEO_NODE_COST
             geo_nodes += nodes
             spent += nodes * self.GEO_NODE_COST
 
         if allocation.cislunar_deployment > 0:
             pts = int(budget * allocation.cislunar_deployment)
+            pts = int(pts * _ape(_mock_fs, "cis_deploy")["pts_multiplier"])
             nodes = pts // self.CISLUNAR_NODE_COST
             cislunar_nodes += nodes
             spent += nodes * self.CISLUNAR_NODE_COST
@@ -106,6 +118,17 @@ class InvestmentResolver:
             ew_jammers += jammers
             spent += jammers * self.EW_JAMMER_COST
 
+        if allocation.commercial > 0:
+            pts = int(budget * allocation.commercial)
+            income_multiplier = _ape(_mock_fs, "commercial_income")["income_multiplier"]
+            deferred.append({
+                "faction_id": faction_id,
+                "category": "commercial_income",
+                "amount": int(pts * income_multiplier),
+                "turn_due": turn + 2,
+            })
+            spent += pts
+
         immediate = FactionAssets(
             leo_nodes=leo_nodes,
             meo_nodes=meo_nodes,
@@ -125,7 +148,8 @@ class InvestmentResolver:
 
 class SDAFilter:
     def filter(
-        self, adversary_assets: FactionAssets, observer_sda_level: float
+        self, adversary_assets: FactionAssets, observer_sda_level: float,
+        adversary_tech_mods: dict | None = None,
     ) -> FactionAssets:
         leo_nodes = int(adversary_assets.leo_nodes * min(observer_sda_level + 0.3, 1.0))
         meo_nodes = int(adversary_assets.meo_nodes * min(observer_sda_level + 0.2, 1.0))
@@ -138,6 +162,12 @@ class SDAFilter:
         if observer_sda_level >= 0.6:
             asat_deniable = round(adversary_assets.asat_deniable * (observer_sda_level - 0.5))
         ew_jammers = int(adversary_assets.ew_jammers * observer_sda_level)
+        if adversary_tech_mods:
+            if not adversary_tech_mods.get("asat_deniable_visible", True):
+                asat_deniable = 0
+            leo_frac = adversary_tech_mods.get("leo_visibility_fraction", 1.0)
+            if leo_frac < 1.0:
+                leo_nodes = int(leo_nodes * leo_frac)
         return FactionAssets(
             leo_nodes=leo_nodes,
             meo_nodes=meo_nodes,
@@ -152,7 +182,7 @@ class SDAFilter:
 class ConflictResolver:
     def resolve_kinetic_asat(
         self, attacker_assets: FactionAssets, target_assets: FactionAssets,
-        attacker_sda_level: float
+        attacker_sda_level: float, attacker_tech_mods: dict = None
     ) -> dict:
         if attacker_assets.asat_kinetic == 0:
             return {"nodes_destroyed": 0, "regime": "none", "detected": False, "attributed": False}
@@ -174,6 +204,8 @@ class ConflictResolver:
             return {"nodes_destroyed": 0, "regime": "none", "detected": True, "attributed": True}
 
         nodes_destroyed = int(effectiveness * attacker_sda_level)
+        if attacker_tech_mods:
+            nodes_destroyed += attacker_tech_mods.get("nodes_destroyed_bonus", 0)
         return {
             "nodes_destroyed": nodes_destroyed,
             "regime": regime,
@@ -223,7 +255,9 @@ class DebrisEngine:
         return sev * 0.5  # linear: 50% disruption at Kessler threshold
 
     def apply_debris_effects(
-        self, faction_states: dict, fields: dict[str, float]
+        self, faction_states: dict, fields: dict[str, float],
+        cascade_immune_factions: set[str] | None = None,
+        kessler_shells: set[str] | None = None,
     ) -> tuple[dict, list[str]]:
         import random
         log: list[str] = []
@@ -236,7 +270,17 @@ class DebrisEngine:
             if penalty == 0:
                 continue
             attr = shell_attr[shell]
+            is_adjacent_to_kessler = (
+                kessler_shells is not None
+                and shell not in kessler_shells
+                and any(
+                    abs(self.SHELLS.index(shell) - self.SHELLS.index(ks)) == 1
+                    for ks in kessler_shells
+                )
+            )
             for fid, fs in faction_states.items():
+                if is_adjacent_to_kessler and cascade_immune_factions and fid in cascade_immune_factions:
+                    continue
                 nodes = getattr(fs.assets, attr)
                 if nodes > 0 and random.random() < penalty:
                     lost = max(1, round(nodes * min(penalty, 0.5) * 0.25))

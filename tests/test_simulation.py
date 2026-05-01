@@ -149,3 +149,72 @@ def test_maneuver_budget_replenish():
                       maneuver_budget=3.0)
     engine.replenish(fs)
     assert fs.maneuver_budget > 3.0
+
+
+def test_trunk_launch_reduces_leo_cost_divisor():
+    resolver = InvestmentResolver()
+    alloc = InvestmentAllocation(constellation=1.0, rationale="test")
+    result_default = resolver.resolve("ussf", 100, alloc, 1, unlocked_techs=[])
+    assert result_default.immediate_assets.leo_nodes == 20  # 100 // 5
+    result_tech = resolver.resolve("ussf", 100, alloc, 1, unlocked_techs=["trunk_launch"])
+    assert result_tech.immediate_assets.leo_nodes == 25  # 100 // 4
+
+
+def test_mah_projection_boosts_geo_nodes():
+    resolver = InvestmentResolver()
+    alloc = InvestmentAllocation(geo_deployment=1.0, rationale="test")
+    result_default = resolver.resolve("ussf", 100, alloc, 1, unlocked_techs=[])
+    assert result_default.immediate_assets.geo_nodes == 4  # 100 // 25
+    result_tech = resolver.resolve("ussf", 100, alloc, 1, unlocked_techs=["mah_projection"])
+    assert result_tech.immediate_assets.geo_nodes == 5  # int(100*1.25)=125 // 25
+
+
+def test_com_market_generates_commercial_income_deferred():
+    resolver = InvestmentResolver()
+    alloc = InvestmentAllocation(commercial=0.5, constellation=0.5, rationale="test")
+    result = resolver.resolve("ussf", 100, alloc, 1, unlocked_techs=["com_market"])
+    commercial_deferred = [r for r in result.deferred_returns if r["category"] == "commercial_income"]
+    assert len(commercial_deferred) == 1
+    assert commercial_deferred[0]["amount"] == 80  # 50 * 1.6
+
+
+def test_commercial_income_default_multiplier():
+    resolver = InvestmentResolver()
+    alloc = InvestmentAllocation(commercial=0.5, constellation=0.5, rationale="test")
+    result = resolver.resolve("ussf", 100, alloc, 1, unlocked_techs=[])
+    commercial_deferred = [r for r in result.deferred_returns if r["category"] == "commercial_income"]
+    assert len(commercial_deferred) == 1
+    assert commercial_deferred[0]["amount"] == 50  # 50 * 1.0
+
+
+def test_gz_masking_hides_asat_deniable():
+    sda = SDAFilter()
+    adversary = FactionAssets(leo_nodes=20, asat_deniable=5)
+    result = sda.filter(adversary, observer_sda_level=0.9)
+    assert result.asat_deniable > 0
+    result_masked = sda.filter(adversary, observer_sda_level=0.9,
+                               adversary_tech_mods={"asat_deniable_visible": False,
+                                                    "leo_visibility_fraction": 1.0})
+    assert result_masked.asat_deniable == 0
+
+
+def test_gz_ghost_reduces_visible_leo_nodes():
+    sda = SDAFilter()
+    adversary = FactionAssets(leo_nodes=20)
+    result_normal = sda.filter(adversary, observer_sda_level=1.0)
+    result_ghost = sda.filter(adversary, observer_sda_level=1.0,
+                               adversary_tech_mods={"asat_deniable_visible": True,
+                                                    "leo_visibility_fraction": 0.75})
+    assert result_ghost.leo_nodes == int(result_normal.leo_nodes * 0.75)
+
+
+def test_mah_strike_adds_nodes_destroyed_bonus():
+    resolver = ConflictResolver()
+    attacker = FactionAssets(asat_kinetic=1, sda_sensors=24)
+    target = FactionAssets(leo_nodes=50)
+    result_default = resolver.resolve_kinetic_asat(attacker, target, attacker_sda_level=1.0)
+    result_strike = resolver.resolve_kinetic_asat(
+        attacker, target, attacker_sda_level=1.0,
+        attacker_tech_mods={"nodes_destroyed_bonus": 1, "debris_multiplier": 1.0, "free_strike": False}
+    )
+    assert result_strike["nodes_destroyed"] == result_default["nodes_destroyed"] + 1
