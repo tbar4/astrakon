@@ -82,6 +82,42 @@ export interface CombatEvent {
   event_type: 'kinetic' | 'deniable' | 'ew_jamming' | 'gray_zone'
   nodes_destroyed: number
   detail: string
+  detected?: boolean
+  attributed?: boolean
+}
+
+export interface OperationPreview {
+  available: boolean
+  unavailable_reason: string
+  dv_cost: number
+  dv_remaining: number
+  nodes_destroyed_estimate: number
+  nodes_destroyed_min: number
+  nodes_destroyed_max: number
+  detection_prob: number
+  attribution_prob: number
+  escalation_delta: number
+  escalation_rung_new: number
+  debris_estimate: number
+  transit_turns: number
+  target_shell: string
+  effect_summary: string
+}
+
+export interface OperationForecast {
+  turn: number
+  faction_id: string
+  action_type: string
+  mission: string
+  target_faction_id: string
+  forecast: OperationPreview
+  actual: {
+    nodes_destroyed: number
+    detected: boolean
+    attributed: boolean
+    event_type: string
+  } | null
+  pending: boolean
 }
 
 export interface GameState {
@@ -128,6 +164,7 @@ export interface GameState {
   }>
   token_totals: Record<string, TokenTotals>
   combat_events?: CombatEvent[]
+  operation_forecasts?: OperationForecast[]
 }
 
 export interface GameStateResponse {
