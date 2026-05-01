@@ -63,13 +63,14 @@ class PreviewEngine:
 - `available=False` if `attacker_fs.assets.asat_kinetic == 0` → `unavailable_reason="No kinetic ASAT assets"`
 - `available=False` if `attacker_fs.maneuver_budget < ManeuverBudgetEngine.COSTS['kinetic_intercept']` → `unavailable_reason="Insufficient DV (need 4.0)"`
 - `available=False` if `target_fs is None` → `unavailable_reason="No target selected"`
+- `target_shell` = target's primary populated shell (leo > meo > geo > cislunar). `available=False` if target has zero nodes in all shells → `unavailable_reason="Target has no orbital assets"`
 - Otherwise call `ConflictResolver().resolve_kinetic_asat(attacker_fs.assets, target_fs.assets, attacker_fs.sda_level())` — uses the deterministic formula (nodes_destroyed is deterministic; detected/attributed are probabilistic, use the probability values directly rather than simulating a roll)
 - `detection_prob=0.80`, `attribution_prob=attacker_fs.sda_level()`
 - `dv_cost=4.0`, `dv_remaining=attacker_fs.maneuver_budget - 4.0`
 - `transit_turns=2`
-- `target_shell` = target's primary populated shell (leo > meo > geo > cislunar)
 - `escalation_delta = max(0, 3 - escalation_rung)`, `escalation_rung_new = max(escalation_rung, 3)`
-- `debris_estimate` = current debris in target shell + `DebrisEngine.DEBRIS_PER_NODE_KINETIC * nodes_destroyed_estimate`
+- `debris_estimate` = `min(current debris in target shell + DebrisEngine.DEBRIS_PER_NODE_KINETIC * nodes_destroyed_estimate, 1.0)`
+- If `access_windows.get(target_shell, True)` is `False`, set `effect_summary="ACCESS WINDOW CLOSED — transit may miss target"` (operation is still available, just warned)
 
 **`task_assets` / `patrol` or `sda_sweep`:**
 - `available=True`, all combat fields 0, `effect_summary="Surveillance only — shows resolve"` for patrol, `"Intelligence gathering — no combat effect"` for sda_sweep
@@ -85,7 +86,7 @@ class PreviewEngine:
 - `dv_cost=2.0`, `dv_remaining=attacker_fs.maneuver_budget - 2.0`
 - `transit_turns=1`
 - `escalation_delta = max(0, 2 - escalation_rung)`, `escalation_rung_new = max(escalation_rung, 2)`
-- `debris_estimate` = current leo debris + `DebrisEngine.DEBRIS_PER_NODE_DENIABLE * nodes_destroyed_estimate`
+- `debris_estimate` = `min(current leo debris + DebrisEngine.DEBRIS_PER_NODE_DENIABLE * nodes_destroyed_estimate, 1.0)`
 
 **`gray_zone` with EW jammers (`attacker_fs.assets.ew_jammers > 0`, no deniable):**
 - `available=False` if `target_fs is None`
@@ -93,7 +94,7 @@ class PreviewEngine:
 - `detection_prob=0.0`, `attribution_prob=0.0`
 - `escalation_delta=0`, `escalation_rung_new=escalation_rung`
 - `effect_summary="Target SDA degraded -15%"` (or `-30%` if `'jamming_radius'` tech unlocked — check `attacker_fs.unlocked_techs`)
-- `debris_estimate = current leo debris + 0.08` (ASAT test debris)
+- `debris_estimate = debris_fields.get("leo", 0.0)` — EW jamming does not generate debris; no change
 
 **`gray_zone` with neither:**
 - `available=False`, `unavailable_reason="No deniable ASAT or EW jammer assets"`
@@ -221,7 +222,7 @@ if req.operation_forecast and req.phase == "operations":
         "action_type": req.operation_forecast.get("action_type", ""),
         "mission": req.operation_forecast.get("mission", ""),
         "target_faction_id": req.operation_forecast.get("target_faction_id", ""),
-        "forecast": req.operation_forecast,
+        "forecast": req.operation_forecast.get("forecast", {}),  # pure OperationPreview fields
         "actual": None,
         "pending": True,
     })
@@ -274,7 +275,7 @@ state.operation_forecasts = self.referee._reconcile_forecasts(state.operation_fo
 
 ---
 
-## Section 4: Frontend — Types
+## Section 5: Frontend — Types
 
 ### `web/src/types.ts`
 
@@ -324,7 +325,7 @@ operation_forecasts?: OperationForecast[]
 
 ---
 
-## Section 5: Frontend — OpsPanel Live Preview
+## Section 6: Frontend — OpsPanel Live Preview
 
 ### `web/src/components/phase/OpsPanel.tsx`
 
@@ -332,7 +333,6 @@ operation_forecasts?: OperationForecast[]
 
 ```typescript
 sessionId: string
-humanFactionState: FactionState
 ```
 
 **New state:**
@@ -437,12 +437,18 @@ function PreviewRows({ preview }: { preview: OperationPreview }) {
 }
 ```
 
-**Updated `handleSubmit`** — attach last preview as forecast:
+**Updated `handleSubmit`** — attach last preview as forecast. The forecast payload wraps the `OperationPreview` fields under a `forecast` key alongside metadata, to match the `OperationForecast` shape expected by the backend:
 
 ```typescript
 function handleSubmit() {
   const params: Record<string, string> = {}
   if (actionType === 'task_assets') params.mission = mission
+  const forecastPayload = preview ? {
+    action_type: actionType,
+    mission: actionType === 'task_assets' ? mission : '',
+    target_faction_id: effectiveTarget || '',
+    forecast: preview,   // pure OperationPreview fields only
+  } : undefined
   onSubmit(
     {
       operations: [{
@@ -452,12 +458,7 @@ function handleSubmit() {
         rationale,
       }],
     },
-    preview ? {
-      ...preview,
-      action_type: actionType,
-      mission: actionType === 'task_assets' ? mission : '',
-      target_faction_id: effectiveTarget || '',
-    } : undefined,
+    forecastPayload,
   )
 }
 ```
@@ -472,11 +473,11 @@ onSubmit: (decision: Record<string, unknown>, forecast?: Record<string, unknown>
 
 Update the call to `handleDecide` (where `onSubmit` is wired) to accept and forward the `forecast` argument to the decide API call body as `operation_forecast`.
 
-Pass `sessionId={gameState.session_id}` and `humanFactionState={gameState.faction_states[gameState.human_faction_id]}` to `OpsPanel` directly from `GamePage` (OpsPanel is rendered from GamePage, not via MapTabContainer).
+Pass `sessionId={gameState.session_id}` to `OpsPanel` directly from `GamePage` (OpsPanel is rendered from GamePage, not via MapTabContainer).
 
 ---
 
-## Section 6: Frontend — ForecastTab
+## Section 7: Frontend — ForecastTab
 
 ### `web/src/components/ForecastTab.tsx` (new file)
 
@@ -524,7 +525,7 @@ Pass `forecasts={gameState.operation_forecasts}` to `MapTabContainer`.
 
 ---
 
-## Section 7: Tests
+## Section 8: Tests
 
 ### `tests/test_operation_preview.py` (new file)
 
@@ -532,16 +533,20 @@ Pass `forecasts={gameState.operation_forecasts}` to `MapTabContainer`.
 2. Kinetic intercept with `asat_kinetic=0` → `available=False`, `unavailable_reason` non-empty
 3. Kinetic intercept with `maneuver_budget=1.0` → `available=False`
 4. Kinetic intercept with `target_fs=None` → `available=False`
-5. Deniable gray_zone with `asat_deniable=3` → `available=True`, `dv_cost=2.0`, `transit_turns=1`, `nodes_destroyed_min=1`, `nodes_destroyed_max=3`
-6. EW gray_zone (`ew_jammers=2`, `asat_deniable=0`) → `available=True`, `transit_turns=0`, `dv_cost=0.0`, `nodes_destroyed_estimate=0`
-7. Gray_zone with neither assets → `available=False`
-8. `PreviewEngine.compute()` does not mutate `attacker_fs.maneuver_budget`
+5. Kinetic intercept with target having zero nodes in all shells → `available=False`, `unavailable_reason` contains "no orbital assets"
+6. Kinetic intercept with `access_windows={"leo": False, ...}` and target's primary shell being LEO → `available=True`, `effect_summary` contains "ACCESS WINDOW CLOSED"
+7. Kinetic intercept `debris_estimate` does not exceed 1.0 when existing debris is already 0.95
+8. Deniable gray_zone with `asat_deniable=3` → `available=True`, `dv_cost=2.0`, `transit_turns=1`, `nodes_destroyed_min=1`, `nodes_destroyed_max=3`
+9. EW gray_zone (`ew_jammers=2`, `asat_deniable=0`) → `available=True`, `transit_turns=0`, `dv_cost=0.0`, `nodes_destroyed_estimate=0`, `debris_estimate` equals existing leo debris (no change)
+10. Gray_zone with neither assets → `available=False`
+11. `PreviewEngine.compute()` does not mutate `attacker_fs.maneuver_budget`
 
 ### `tests/test_forecast_ledger.py` (new file)
 
-9. Submitting ops decision with `operation_forecast` → `GameState.operation_forecasts` has one entry with `actual=None`, `pending=True`
-10. After RESPONSE phase with matching kinetic combat event → forecast `actual` is filled with `nodes_destroyed`, `detected`, `attributed`
-11. Forecast for patrol action (no combat event) → stays `actual=None`, `pending=False` after reconcile
+12. Submitting ops decision with `operation_forecast` → `GameState.operation_forecasts` has one entry with `actual=None`, `pending=True`
+13. After RESPONSE phase with matching kinetic combat event → forecast `actual` is filled with `nodes_destroyed`, `detected`, `attributed`
+14. Forecast for patrol action (no combat event) → stays `actual=None`, `pending=False` after reconcile
+15. Kinetic intercept forecast (2-turn transit): after turn N's RESPONSE phase, `pending=True` (no match yet); after turn N+2's RESPONSE phase (when kinetic resolves), `pending=False` and `actual` is filled in
 
 ---
 
@@ -550,16 +555,15 @@ Pass `forecasts={gameState.operation_forecasts}` to `MapTabContainer`.
 | File | Action |
 |------|--------|
 | `engine/preview.py` | New — `OperationPreview` model + `PreviewEngine` |
-| `api/routes/game.py` | Add `PreviewRequest` model + `/preview` route; update `/decide` to save forecast |
-| `api/models.py` | Add `operation_forecasts` to `GameState`; add `operation_forecast` to `DecideRequest` |
-| `engine/referee.py` | Add `_reconcile_forecasts()` method |
-| `api/runner.py` | Call `referee._reconcile_forecasts()` in `_sync_state_from_referee` |
-| `web/src/types.ts` | Add `OperationPreview`, `OperationForecast`, update `GameState` |
-| `web/src/components/phase/OpsPanel.tsx` | Add preview fetch, preview panel, updated `onSubmit` |
-| `web/src/components/ForecastTab.tsx` | New — forecast accuracy table |
 | `engine/state.py` | Add `detected`, `attributed` fields to `CombatEvent` |
 | `engine/referee.py` | Populate `detected`/`attributed` in CombatEvent appends; add `_reconcile_forecasts()` |
-| `web/src/components/MapTabContainer.tsx` | Add FORECAST tab + pass-through props |
-| `web/src/pages/GamePage.tsx` | Wire `sessionId`, `humanFactionState`, `forecasts`, forward forecast on decide |
+| `api/models.py` | Add `operation_forecasts` to `GameState`; add `operation_forecast` to `DecideRequest` |
+| `api/routes/game.py` | Add `PreviewRequest` model + `/preview` route; update `/decide` to save forecast |
+| `api/runner.py` | Call `referee._reconcile_forecasts()` in `_sync_state_from_referee` |
+| `web/src/types.ts` | Add `OperationPreview`, `OperationForecast`, update `GameState` |
+| `web/src/components/phase/OpsPanel.tsx` | Add `sessionId` prop, preview fetch + panel, updated `onSubmit` |
+| `web/src/components/ForecastTab.tsx` | New — forecast accuracy table |
+| `web/src/components/MapTabContainer.tsx` | Add FORECAST tab + `forecasts` prop pass-through |
+| `web/src/pages/GamePage.tsx` | Wire `sessionId`, `forecasts`; forward forecast on decide |
 | `tests/test_operation_preview.py` | New — PreviewEngine unit tests |
 | `tests/test_forecast_ledger.py` | New — forecast ledger integration tests |
