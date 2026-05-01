@@ -726,6 +726,8 @@ class GameReferee:
                             event_type="ew_jamming",
                             nodes_destroyed=0,
                             detail=f"{fs.name} EW jamming ops against {target_fs.name}",
+                            detected=False,
+                            attributed=False,
                         ).model_dump())
                     else:
                         self._prev_turn_ops.append("gray_zone")
