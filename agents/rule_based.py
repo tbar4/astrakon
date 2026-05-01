@@ -7,6 +7,22 @@ from engine.state import (
 )
 
 
+def _rule_agent_for_archetype(archetype: str) -> AgentInterface:
+    """Return the appropriate rule-based agent for a given faction archetype.
+
+    Defined here (and mirrored in scenarios/loader.py) so that ParameterizedRuleAgent
+    can delegate to the correct rule-based doctrine without a circular import.
+    """
+    return {
+        "mahanian":              MahanianAgent,
+        "commercial_broker":     CommercialBrokerAgent,
+        "gray_zone":             GrayZoneAgent,
+        "patient_dragon":        GrayZoneAgent,
+        "rogue_accelerationist": RogueAccelerationistAgent,
+        "iron_napoleon":         RogueAccelerationistAgent,
+    }.get(archetype, MahanianAgent)()
+
+
 def _situation(snap: Optional[GameStateSnapshot]) -> tuple[float, float, float, int, str]:
     """(my_dom, threshold, dom_gap, turns_left, urgency)  — urgency: ahead/normal/urgent/critical.
 

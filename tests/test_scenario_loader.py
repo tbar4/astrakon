@@ -27,3 +27,22 @@ def test_faction_budget_positive():
     scenario = load_scenario(path)
     for faction in scenario.factions:
         assert faction.budget_per_turn > 0
+
+
+def test_faction_has_checkpoint_path_field():
+    from scenarios.loader import Faction
+    f = Faction(
+        faction_id="x", name="X", archetype="mahanian",
+        agent_type="alphazero", budget_per_turn=100,
+        checkpoint_path="training/checkpoints/test.pt",
+    )
+    assert f.checkpoint_path == "training/checkpoints/test.pt"
+
+
+def test_checkpoint_path_optional_default_none():
+    from scenarios.loader import Faction
+    f = Faction(
+        faction_id="x", name="X", archetype="mahanian",
+        agent_type="rule_based", budget_per_turn=100,
+    )
+    assert f.checkpoint_path is None
