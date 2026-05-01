@@ -89,16 +89,6 @@ function nodeColor(
   return '#f59e0b'
 }
 
-function isClickable(
-  id: string, phase: string, unlocked: string[], pending: string[],
-  rdPoints: number, humanArchetype: string
-): boolean {
-  if (phase !== 'invest') return false
-  if (unlocked.includes(id)) return false
-  const color = nodeColor(id, phase, unlocked, pending, rdPoints, humanArchetype)
-  return color === '#f59e0b' || color === '#00d4ff'
-}
-
 interface NodeBoxProps {
   id: string; cx: number; cy: number
   phase: string; unlocked: string[]; pending: string[]
@@ -110,7 +100,7 @@ function NodeBox({ id, cx, cy, phase, unlocked, pending, rdPoints, humanArchetyp
   const color = nodeColor(id, phase, unlocked, pending, rdPoints, humanArchetype)
   const meta = NODE_BY_ID[id]
   if (!meta) return null
-  const clickable = isClickable(id, phase, unlocked, pending, rdPoints, humanArchetype)
+  const clickable = color === '#f59e0b' || color === '#00d4ff'
   const label = pending.includes(id)
     ? 'QUEUED' : unlocked.includes(id)
     ? '✓ UNLOCKED' : `${meta.cost} pts`
@@ -180,8 +170,8 @@ export default function TechTreePanel({
           style={{ width: '100%', maxWidth: SVG_W, display: 'block', margin: '0 auto' }}
         >
           <line
-            x1={TRUNK_CX[0]} y1={TRUNK_Y + NH / 2 + 8}
-            x2={TRUNK_CX[2]} y2={TRUNK_Y + NH / 2 + 8}
+            x1={COL_X[0]} y1={TRUNK_Y + NH / 2 + 8}
+            x2={COL_X[3]} y2={TRUNK_Y + NH / 2 + 8}
             stroke="#33415544" strokeWidth={1}
           />
 
