@@ -27,6 +27,10 @@ export interface FactionState {
   joint_force_effectiveness: number
   maneuver_budget: number
   cognitive_penalty: number
+  archetype: string
+  tech_tree?: Record<string, number>
+  unlocked_techs?: string[]
+  rog_shock_used?: boolean
 }
 
 export interface CoalitionState {
@@ -170,6 +174,7 @@ export interface InvestmentDecision {
     diplomacy?: number
     rationale: string
   }
+  tech_unlocks?: string[]
 }
 
 export interface OperationsDecision {
