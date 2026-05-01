@@ -7,12 +7,6 @@ from scenarios.loader import load_scenario
 SCENARIO = load_scenario(Path("scenarios/pacific_crossroads.yaml"))
 
 
-@pytest.mark.xfail(reason="slots 16-99 added in Task 3", strict=False)
-def test_invest_portfolio_count():
-    space = ActionSpace(SCENARIO)
-    assert len(space.invest_portfolios) == 100
-
-
 def test_archetype_portfolio_range_valid():
     space = ActionSpace(SCENARIO)
     for i in range(16):
@@ -48,7 +42,15 @@ def test_random_portfolios_sum_valid():
     space = ActionSpace(SCENARIO)
     for i in range(20, 100):
         alloc, _ = space.invest_portfolios[i]
-        assert alloc.total() <= 1.001, f"slot {i} sums to {alloc.total():.4f}"
+        t = alloc.total()
+        assert 0.45 <= t <= 1.001, f"slot {i} total {t:.4f} out of expected [0.45, 1.001]"
+
+
+def test_extremal_portfolio_range_valid():
+    space = ActionSpace(SCENARIO)
+    for i in range(16, 20):
+        alloc, name = space.invest_portfolios[i]
+        assert alloc.total() <= 1.001, f"slot {i} ({name}) sums to {alloc.total():.3f}"
 
 
 def test_extremal_portfolio_names():

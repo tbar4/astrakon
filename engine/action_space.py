@@ -103,7 +103,7 @@ class ActionSpace:
         ]
         for idx in range(80):
             raw = rng.dirichlet(np.ones(len(fields)))
-            scale = rng.uniform(0.5, 0.95)
+            scale = rng.uniform(0.5, 0.95)  # total() == scale ∈ [0.5, 0.95] by construction
             values = (raw * scale).tolist()
             alloc = InvestmentAllocation(**dict(zip(fields, values)))
             self.invest_portfolios.append((alloc, f"invest_slot_{idx + 20:03d}"))
