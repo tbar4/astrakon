@@ -7,6 +7,13 @@ from fastapi import APIRouter, HTTPException
 from api.models import AarRequest, CreateGameRequest, DecideRequest, GameStateResponse
 from api import runner
 from api.session import load_session, _DEFAULT_DB
+from pydantic import BaseModel as _BaseModel
+
+
+class PreviewRequest(_BaseModel):
+    action_type: str
+    mission: str = ""
+    target_faction_id: str = ""
 
 # Only one AAR generation runs at a time to avoid exceeding the API rate limit.
 _aar_semaphore = asyncio.Semaphore(1)
@@ -97,6 +104,28 @@ async def decide(session_id: str, req: DecideRequest):
         return await runner.advance(session_id, decision=decision)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
+
+
+@router.post("/game/{session_id}/preview")
+async def preview_operation(session_id: str, req: PreviewRequest):
+    state = await load_session(session_id)
+    if state is None:
+        raise HTTPException(status_code=404, detail="Session not found")
+    attacker_fs = state.faction_states.get(state.human_faction_id)
+    if attacker_fs is None:
+        raise HTTPException(status_code=400, detail="Human faction not found")
+    target_fs = state.faction_states.get(req.target_faction_id) if req.target_faction_id else None
+    from engine.preview import PreviewEngine
+    preview = PreviewEngine().compute(
+        action_type=req.action_type,
+        mission=req.mission,
+        attacker_fs=attacker_fs,
+        target_fs=target_fs,
+        debris_fields=state.debris_fields,
+        access_windows=state.access_windows,
+        escalation_rung=state.escalation_rung,
+    )
+    return preview.model_dump()
 
 
 @router.get("/game/{session_id}/recommend")
