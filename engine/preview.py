@@ -108,7 +108,7 @@ class PreviewEngine:
             nodes_destroyed_min=nodes_est,
             nodes_destroyed_max=nodes_est,
             detection_prob=0.80,
-            attribution_prob=attacker_fs.sda_level(),
+            attribution_prob=target_fs.sda_level(),
             escalation_delta=max(0, 3 - escalation_rung),
             escalation_rung_new=max(escalation_rung, 3),
             debris_estimate=debris_est,
