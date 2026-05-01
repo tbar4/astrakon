@@ -209,3 +209,17 @@ def test_information_state_deterministic():
     s1 = g.information_state_string(0)
     s2 = g.information_state_string(0)
     assert s1 == s2
+
+
+def test_headless_runner_single_game():
+    from runners.headless import HeadlessRunner, GameResult
+    import engine.openspiel_env  # register game
+    game = __import__("pyspiel").load_game(
+        "astrakon", {"scenario_path": "scenarios/pacific_crossroads.yaml"}
+    )
+    runner = HeadlessRunner()
+    result = runner.run_game(game, bots=None, seed=42)
+    assert isinstance(result, GameResult)
+    assert result.n_turns > 0
+    assert result.final_dominance is not None
+    assert len(result.returns) == 4
