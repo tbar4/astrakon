@@ -425,7 +425,7 @@ class GameReferee:
                 if node is None:
                     continue
                 if node_id in fs.unlocked_techs:
-                    continue
+                    continue  # guard prevents double-apply of one-time effects (e.g. trunk_capacity)
                 if node.archetype is not None and node.archetype != fs.archetype:
                     self._turn_log.append(
                         f"[TECH] {fs.name} rejected unlock {node_id} — archetype mismatch"
@@ -752,7 +752,12 @@ class GameReferee:
         self._turn_log_summary = self._build_turn_log_summary(turn)
 
     def resolve_pending_kinetics(self, turn: int) -> None:
-        """Resolve kinetic approaches with 2-turn transit (declared N, resolves at N+2)."""
+        """Resolve kinetic approaches with 2-turn transit (declared N, resolves at N+2).
+
+        Called at the start of INVEST phase (after resolve_investment). rog_ascent approaches
+        are declared during OPERATIONS and removed during resolve_response of the same turn,
+        so they will never appear here with declared_turn == turn - 2 for that turn.
+        """
         resolved = [
             a for a in self._pending_kinetic_approaches
             if a.get("approach_type", "kinetic") == "kinetic"
