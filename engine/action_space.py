@@ -179,4 +179,34 @@ class ActionSpace:
         return self.ops_actions[local_idx]
 
     def _build_response(self) -> None:
+        """Pre-enumerate all valid (escalate, retaliate, target_faction_id) combos."""
         self.response_actions: list[dict] = []
+        fids = self.faction_ids
+
+        # De-escalate, no retaliation
+        self.response_actions.append({
+            "escalate": False, "retaliate": False, "target_faction_id": None,
+        })
+
+        # Escalate without retaliation
+        self.response_actions.append({
+            "escalate": True, "retaliate": False, "target_faction_id": None,
+        })
+
+        # Escalate + retaliate against each faction
+        for fid in fids:
+            self.response_actions.append({
+                "escalate": True, "retaliate": True, "target_faction_id": fid,
+            })
+
+        # De-escalate publicly but retaliate deniably (gray-zone response)
+        for fid in fids:
+            self.response_actions.append({
+                "escalate": False, "retaliate": True, "target_faction_id": fid,
+            })
+
+    def response_action_from_index(self, global_idx: int) -> dict:
+        local_idx = global_idx - self.RESPONSE_OFFSET
+        if local_idx < 0 or local_idx >= self.RESPONSE_COUNT:
+            raise ValueError(f"Action index {global_idx} out of RESPONSE range")
+        return self.response_actions[local_idx]

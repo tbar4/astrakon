@@ -93,3 +93,29 @@ def test_no_illegal_ops_combinations():
         assert not (action_type == "signal" and target is None)
         # alliance_move requires a target
         assert not (action_type == "alliance_move" and target is None)
+
+
+def test_response_actions_nonempty():
+    space = ActionSpace(SCENARIO)
+    assert len(space.response_actions) >= 6
+
+
+def test_response_decode_round_trip():
+    space = ActionSpace(SCENARIO)
+    for idx, entry in enumerate(space.response_actions):
+        decoded = space.response_action_from_index(idx + space.RESPONSE_OFFSET)
+        assert decoded["escalate"] == entry["escalate"]
+        assert decoded["retaliate"] == entry["retaliate"]
+
+
+def test_response_retaliate_requires_target():
+    space = ActionSpace(SCENARIO)
+    for entry in space.response_actions:
+        if entry["retaliate"]:
+            assert entry["target_faction_id"] is not None
+
+
+def test_total_action_count():
+    space = ActionSpace(SCENARIO)
+    assert space.TOTAL_ACTIONS == space.INVEST_COUNT + space.OPS_COUNT + space.RESPONSE_COUNT
+    assert space.TOTAL_ACTIONS > 100
