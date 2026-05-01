@@ -1,6 +1,6 @@
 // web/src/components/HoloOrbitalMap.tsx
 import React, { useState, useMemo, useEffect, useRef } from 'react'
-import type { GameState, FactionState } from '../types'
+import type { GameState, FactionState, CombatEvent } from '../types'
 
 export const TILT_FACTOR = 0.45
 const CX = 130
@@ -156,6 +156,99 @@ function dotsOnEllipse(
   return elements
 }
 
+const SHELL_RADIUS: Record<string, number> = { leo: 48, meo: 70, geo: 97, cislunar: 115 }
+
+function CombatArcLayer({
+  combatEvents,
+  arcOpacity,
+  factions,
+  angleStep,
+}: {
+  combatEvents: CombatEvent[]
+  arcOpacity: number
+  factions: [string, FactionState][]
+  angleStep: number
+}): React.ReactElement | null {
+  if (!combatEvents.length) return null
+
+  return (
+    <g opacity={arcOpacity} style={{ transition: 'opacity 2s ease-in-out' }} pointerEvents="none">
+      {combatEvents.map((ev, i) => {
+        const attackerIdx = factions.findIndex(([fid]) => fid === ev.attacker_id)
+        const targetIdx = factions.findIndex(([fid]) => fid === ev.target_faction_id)
+        if (attackerIdx === -1 || targetIdx === -1) return null
+
+        // Attacker: primary shell = shell with most assets
+        const aFs = factions[attackerIdx][1]
+        const shellKeys = ['leo_nodes', 'meo_nodes', 'geo_nodes', 'cislunar_nodes'] as const
+        const aShellKey = shellKeys.reduce(
+          (best, k) => aFs.assets[k] > aFs.assets[best] ? k : best,
+          'leo_nodes' as typeof shellKeys[number]
+        )
+        const aR = SHELL_RADIUS[aShellKey.replace('_nodes', '')] ?? 48
+        const aAngle = attackerIdx * angleStep
+        const { x: sx, y: sy } = ellipsePoint(aR, aAngle)
+
+        // Target: shell that was attacked
+        const tR = SHELL_RADIUS[ev.shell] ?? 48
+        const tAngle = targetIdx * angleStep
+        const { x: tx, y: ty } = ellipsePoint(tR, tAngle)
+
+        // Control point: midpoint pushed outward from CX,CY
+        const mx = (sx + tx) / 2
+        const my = (sy + ty) / 2
+        const dx = mx - CX
+        const dy = my - CY
+        const len = Math.sqrt(dx * dx + dy * dy) || 1
+        const outset = 55
+        const cpx = mx + (dx / len) * outset
+        const cpy = my + (dy / len) * outset
+
+        // Badge midpoint at t=0.5 on quadratic bezier: 0.25*S + 0.5*C + 0.25*T
+        const bx = 0.25 * sx + 0.5 * cpx + 0.25 * tx
+        const by = 0.25 * sy + 0.5 * cpy + 0.25 * ty
+
+        const isKinetic = ev.event_type === 'kinetic'
+        const color = isKinetic ? '#ff4499' : '#f59e0b'
+        const dash = isKinetic ? undefined : '3 3'
+
+        const attackerName = aFs.name.slice(0, 4).toUpperCase()
+        const targetName = factions[targetIdx][1].name.slice(0, 4).toUpperCase()
+        const shellLabel = ev.shell.toUpperCase()
+        const badge = ev.nodes_destroyed > 0
+          ? `${attackerName} → ${targetName} ${shellLabel} −${ev.nodes_destroyed}`
+          : `${attackerName} ⤳ ${targetName} ${ev.event_type === 'ew_jamming' ? 'EW' : 'DN'}`
+        const badgeW = badge.length * 4.5 + 8
+
+        return (
+          <g key={i}>
+            <path
+              d={`M ${sx} ${sy} Q ${cpx} ${cpy} ${tx} ${ty}`}
+              fill="none" stroke={color} strokeWidth={1.5}
+              strokeDasharray={dash} opacity={0.85}
+            />
+            <circle cx={tx} cy={ty} r={3} fill={color} opacity={0.9} />
+            <circle cx={tx} cy={ty} r={6} fill="none" stroke={color} strokeWidth={1} opacity={0.5}>
+              <animate attributeName="r" values="4;12;4" dur="2s" repeatCount="indefinite" />
+              <animate attributeName="opacity" values="0.5;0;0.5" dur="2s" repeatCount="indefinite" />
+            </circle>
+            <rect
+              x={bx - badgeW / 2} y={by - 7} width={badgeW} height={12}
+              rx={2} fill="#020b18" stroke={color} strokeWidth={0.8} opacity={0.9}
+            />
+            <text
+              x={bx} y={by + 1} textAnchor="middle" dominantBaseline="middle"
+              fill={color} fontSize={5.5} fontFamily="Courier New" letterSpacing={0.5}
+            >
+              {badge}
+            </text>
+          </g>
+        )
+      })}
+    </g>
+  )
+}
+
 interface Props {
   gameState: GameState
   prevFactionStates: Record<string, FactionState> | null
@@ -171,12 +264,15 @@ interface Props {
   targetingMode?: boolean
   lockedFaction?: string | null
   onFactionClick?: (factionId: string) => void
+  combatEvents?: CombatEvent[]
+  arcOpacity?: number
 }
 
 export default function HoloOrbitalMap({
   gameState, prevFactionStates, humanAdversaryEstimates,
   selectedShell, selectedFaction, onShellHover, onFactionHover,
   targetingMode, lockedFaction, onFactionClick,
+  combatEvents, arcOpacity,
 }: Props) {
   const factions = useMemo(() => Object.entries(gameState.faction_states), [gameState.faction_states])
   const angleStep = (Math.PI * 2) / Math.max(factions.length, 1)
@@ -422,6 +518,15 @@ export default function HoloOrbitalMap({
                 </g>
               )
             })
+          )}
+
+          {combatEvents && combatEvents.length > 0 && (
+            <CombatArcLayer
+              combatEvents={combatEvents}
+              arcOpacity={arcOpacity ?? 1}
+              factions={factions}
+              angleStep={angleStep}
+            />
           )}
 
           {/* Targeting reticle for locked faction */}
