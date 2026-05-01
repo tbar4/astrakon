@@ -218,3 +218,30 @@ def test_mah_strike_adds_nodes_destroyed_bonus():
         attacker_tech_mods={"nodes_destroyed_bonus": 1, "debris_multiplier": 1.0, "free_strike": False}
     )
     assert result_strike["nodes_destroyed"] == result_default["nodes_destroyed"] + 1
+
+
+def test_rog_cascade_immune_faction_skips_adjacent_shell_damage():
+    import random as _random
+    from engine.simulation import DebrisEngine
+    engine = DebrisEngine()
+    faction_states = {
+        "immune": FactionState(faction_id="immune", name="I",
+                               budget_per_turn=0, current_budget=0,
+                               assets=FactionAssets(leo_nodes=100)),
+        "normal": FactionState(faction_id="normal", name="N",
+                               budget_per_turn=0, current_budget=0,
+                               assets=FactionAssets(leo_nodes=100)),
+    }
+    # Force damage to occur: seed RNG so random.random() < penalty
+    _random.seed(0)
+    # LEO has debris pressure; MEO is Kessler (adjacent to LEO)
+    fields = {"leo": 0.8, "meo": 1.0}  # leo debris causes damage; meo is Kessler
+    updated, _ = engine.apply_debris_effects(
+        faction_states, fields,
+        cascade_immune_factions={"immune"},
+        kessler_shells={"meo"},
+    )
+    # Immune faction should NOT take damage in LEO (adjacent to Kessler MEO)
+    assert updated["immune"].assets.leo_nodes == 100
+    # Normal faction SHOULD take damage
+    assert updated["normal"].assets.leo_nodes < 100

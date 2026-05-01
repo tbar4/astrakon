@@ -182,7 +182,7 @@ class SDAFilter:
 class ConflictResolver:
     def resolve_kinetic_asat(
         self, attacker_assets: FactionAssets, target_assets: FactionAssets,
-        attacker_sda_level: float, attacker_tech_mods: dict = None
+        attacker_sda_level: float, attacker_tech_mods: dict | None = None
     ) -> dict:
         if attacker_assets.asat_kinetic == 0:
             return {"nodes_destroyed": 0, "regime": "none", "detected": False, "attributed": False}
