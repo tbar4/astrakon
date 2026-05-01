@@ -114,7 +114,69 @@ class ActionSpace:
         return self.invest_portfolios[idx][1]
 
     def _build_ops(self) -> None:
+        """Pre-enumerate all valid (action_type, target_faction_id, mission) triples.
+
+        Action indices must be globally stable — action N always means the same
+        (action_type, target, mission) regardless of game state.
+        """
         self.ops_actions: list[dict] = []
+        fids = self.faction_ids
+
+        # task_assets with no specific target (self-directed missions)
+        for mission in ("sda_sweep", "patrol"):
+            self.ops_actions.append({
+                "action_type": "task_assets",
+                "target_faction_id": None,
+                "mission": mission,
+            })
+
+        # task_assets directed at a specific faction
+        for fid in fids:
+            for mission in ("intercept", "sda_sweep"):
+                self.ops_actions.append({
+                    "action_type": "task_assets",
+                    "target_faction_id": fid,
+                    "mission": mission,
+                })
+
+        # coordinate (coalition coordination — any other faction)
+        for fid in fids:
+            self.ops_actions.append({
+                "action_type": "coordinate",
+                "target_faction_id": fid,
+                "mission": "",
+            })
+
+        # gray_zone (deniable operation against any faction)
+        for fid in fids:
+            self.ops_actions.append({
+                "action_type": "gray_zone",
+                "target_faction_id": fid,
+                "mission": "",
+            })
+
+        # alliance_move (diplomatic positioning toward any faction)
+        for fid in fids:
+            self.ops_actions.append({
+                "action_type": "alliance_move",
+                "target_faction_id": fid,
+                "mission": "",
+            })
+
+        # signal (public declaration toward any faction)
+        for fid in fids:
+            self.ops_actions.append({
+                "action_type": "signal",
+                "target_faction_id": fid,
+                "mission": "",
+            })
+
+    def ops_action_from_index(self, global_idx: int) -> dict:
+        """Decode a global action index in the OPS range to an action dict."""
+        local_idx = global_idx - self.OPS_OFFSET
+        if local_idx < 0 or local_idx >= self.OPS_COUNT:
+            raise ValueError(f"Action index {global_idx} out of OPS range")
+        return self.ops_actions[local_idx]
 
     def _build_response(self) -> None:
         self.response_actions: list[dict] = []

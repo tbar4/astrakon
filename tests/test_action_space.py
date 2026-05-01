@@ -57,3 +57,39 @@ def test_extremal_portfolio_names():
     space = ActionSpace(SCENARIO)
     names = [name for _, name in space.invest_portfolios[16:20]]
     assert names == ["pure_orbital_leo", "pure_orbital_geo", "pure_kinetic", "pure_covert"]
+
+
+def test_ops_actions_nonempty():
+    space = ActionSpace(SCENARIO)
+    assert len(space.ops_actions) > 0
+
+
+def test_ops_indices_stable_across_instances():
+    space1 = ActionSpace(SCENARIO)
+    space2 = ActionSpace(SCENARIO)
+    assert len(space1.ops_actions) == len(space2.ops_actions)
+    for a1, a2 in zip(space1.ops_actions, space2.ops_actions):
+        assert a1["action_type"] == a2["action_type"]
+        assert a1.get("target_faction_id") == a2.get("target_faction_id")
+        assert a1.get("mission") == a2.get("mission")
+
+
+def test_ops_decode_round_trip():
+    space = ActionSpace(SCENARIO)
+    for idx, entry in enumerate(space.ops_actions):
+        decoded = space.ops_action_from_index(idx + space.OPS_OFFSET)
+        assert decoded["action_type"] == entry["action_type"]
+
+
+def test_no_illegal_ops_combinations():
+    space = ActionSpace(SCENARIO)
+    for entry in space.ops_actions:
+        action_type = entry["action_type"]
+        mission = entry.get("mission", "")
+        target = entry.get("target_faction_id")
+        # coordinate + intercept is invalid
+        assert not (action_type == "coordinate" and mission == "intercept")
+        # signal requires a target
+        assert not (action_type == "signal" and target is None)
+        # alliance_move requires a target
+        assert not (action_type == "alliance_move" and target is None)
