@@ -12,7 +12,7 @@ interface Props {
 
 const TRUNK_IDS = ['trunk_launch', 'trunk_capacity', 'trunk_budget']
 
-interface NodeMeta {
+export interface NodeMeta {
   id: string
   name: string
   cost: number
@@ -21,7 +21,7 @@ interface NodeMeta {
   archetype: string | null
 }
 
-const NODE_META: NodeMeta[] = [
+export const NODE_META: NodeMeta[] = [
   { id: 'trunk_launch',   name: 'EFFICIENT LAUNCH',      cost: 2, tier: 1, prereqs: [], archetype: null },
   { id: 'trunk_capacity', name: 'INTEGRATED SYSTEMS',    cost: 2, tier: 1, prereqs: [], archetype: null },
   { id: 'trunk_budget',   name: 'RESOURCE OPTIMIZATION', cost: 2, tier: 1, prereqs: [], archetype: null },
@@ -160,7 +160,7 @@ export default function TechTreePanel({
         padding: '6px 16px', display: 'flex', alignItems: 'center', gap: 12,
         borderBottom: '1px solid #00d4ff11', flexShrink: 0,
       }}>
-        <span className="mono" style={{ fontSize: 11, color: '#64748b', letterSpacing: 2 }}>R&D POOL</span>
+        <span className="mono" style={{ fontSize: 11, color: '#64748b', letterSpacing: 2 }}>R&D:</span>
         <span className="mono" style={{ fontSize: 14, color: rdColor, letterSpacing: 2, fontWeight: 'bold' }}>
           {rdPoints} pts
         </span>
