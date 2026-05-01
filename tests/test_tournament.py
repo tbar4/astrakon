@@ -58,3 +58,24 @@ def test_win_matrix_is_square():
     strategies = list(result.win_matrix.keys())
     for s in strategies:
         assert set(result.win_matrix[s].keys()) == set(strategies)
+
+
+def test_evaluation_metrics_summary():
+    from runners.evaluation import EvaluationMetrics
+    from runners.headless import GameResult
+    results = [
+        GameResult(winner_coalition="blue", returns=[1.0, 1.0, -1.0, -1.0],
+                   final_dominance={"blue": 0.71, "red": 0.48},
+                   action_history=[], n_turns=12),
+        GameResult(winner_coalition="red", returns=[-1.0, -1.0, 1.0, 1.0],
+                   final_dominance={"blue": 0.45, "red": 0.72},
+                   action_history=[], n_turns=8),
+        GameResult(winner_coalition=None, returns=[0.0, 0.0, 0.0, 0.0],
+                   final_dominance={"blue": 0.55, "red": 0.55},
+                   action_history=[], n_turns=14),
+    ]
+    summary = EvaluationMetrics.summarize(results)
+    assert "mean_game_length" in summary
+    assert abs(summary["mean_game_length"] - (12 + 8 + 14) / 3) < 0.01
+    assert "draw_rate" in summary
+    assert abs(summary["draw_rate"] - 1/3) < 0.01
