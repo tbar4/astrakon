@@ -361,7 +361,8 @@ export default function GamePage() {
               factionNames={factionNames}
               humanFactionId={gameState.human_faction_id}
               asatKinetic={fs.assets.asat_kinetic}
-              onSubmit={handleDecision}
+              sessionId={sessionId!}
+              onSubmit={(d) => handleDecision(d)}
               disabled={isLoading}
               mapTarget={pendingTarget}
               onClearMapTarget={() => setPendingTarget(null)}

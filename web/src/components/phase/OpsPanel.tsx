@@ -1,11 +1,13 @@
 // web/src/components/phase/OpsPanel.tsx
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
+import type { OperationPreview } from '../../types'
 
 interface Props {
   factionNames: Record<string, string>
   humanFactionId: string
   asatKinetic: number
-  onSubmit: (decision: Record<string, unknown>) => void
+  sessionId: string
+  onSubmit: (decision: Record<string, unknown>, forecast?: Record<string, unknown>) => void
   disabled: boolean
   mapTarget?: string | null
   onClearMapTarget?: () => void
@@ -27,11 +29,54 @@ const MISSIONS = [
 
 type ActionKey = typeof ACTION_TYPES[number]['key']
 
-export default function OpsPanel({ factionNames, humanFactionId, asatKinetic, onSubmit, disabled, mapTarget, onClearMapTarget }: Props) {
+function PreviewRows({ preview }: { preview: OperationPreview }) {
+  const rows: [string, string][] = []
+  if (preview.dv_cost > 0) {
+    rows.push(['DV COST', `-${preview.dv_cost.toFixed(1)}`])
+    rows.push(['DV REMAINING', preview.dv_remaining.toFixed(1)])
+  }
+  if (preview.target_shell) rows.push(['TARGET SHELL', preview.target_shell.toUpperCase()])
+  if (preview.nodes_destroyed_min === preview.nodes_destroyed_max) {
+    rows.push(['EST. NODES', `${preview.nodes_destroyed_estimate}`])
+  } else {
+    rows.push(['EST. NODES', `${preview.nodes_destroyed_min}–${preview.nodes_destroyed_max}`])
+  }
+  if (preview.detection_prob > 0) rows.push(['DETECTED', `${Math.round(preview.detection_prob * 100)}%`])
+  if (preview.attribution_prob > 0) rows.push(['ATTRIBUTED', `${Math.round(preview.attribution_prob * 100)}%`])
+  if (preview.escalation_delta > 0)
+    rows.push(['ESCALATION', `→ RNG ${preview.escalation_rung_new}`])
+  if (preview.debris_estimate > 0)
+    rows.push(['DEBRIS', `+${(preview.debris_estimate * 100).toFixed(0)}%`])
+  if (preview.transit_turns > 0)
+    rows.push(['TRANSIT', preview.transit_turns === 1 ? '1 TURN' : '2 TURNS'])
+  else if (preview.dv_cost === 0 && rows.length > 0)
+    rows.push(['TIMING', 'IMMEDIATE'])
+
+  if (rows.length === 0) return null
+
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '2px 12px' }}>
+      {rows.map(([label, value]) => (
+        <span key={label + '-row'} style={{ display: 'contents' }}>
+          <span style={{ fontSize: 11, color: '#475569', fontFamily: 'Courier New' }}>{label}</span>
+          <span style={{ fontSize: 11, color: '#e2e8f0', fontFamily: 'Courier New' }}>{value}</span>
+        </span>
+      ))}
+    </div>
+  )
+}
+
+export default function OpsPanel({
+  factionNames, humanFactionId, asatKinetic, sessionId,
+  onSubmit, disabled, mapTarget, onClearMapTarget,
+}: Props) {
   const [actionType, setActionType] = useState<ActionKey>('task_assets')
   const [target, setTarget] = useState('')
   const [mission, setMission] = useState('sda_sweep')
   const [rationale, setRationale] = useState('')
+  const [preview, setPreview] = useState<OperationPreview | null>(null)
+  const [previewLoading, setPreviewLoading] = useState(false)
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
     if (mapTarget != null) setTarget(mapTarget)
@@ -40,17 +85,48 @@ export default function OpsPanel({ factionNames, humanFactionId, asatKinetic, on
   const otherFactions = Object.entries(factionNames).filter(([fid]) => fid !== humanFactionId)
   const effectiveTarget = mapTarget ?? target
 
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+    debounceRef.current = setTimeout(async () => {
+      setPreviewLoading(true)
+      try {
+        const res = await fetch(`/api/game/${sessionId}/preview`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action_type: actionType,
+            mission: actionType === 'task_assets' ? mission : '',
+            target_faction_id: effectiveTarget || '',
+          }),
+        })
+        if (res.ok) setPreview(await res.json())
+      } finally {
+        setPreviewLoading(false)
+      }
+    }, 300)
+    return () => { if (debounceRef.current) clearTimeout(debounceRef.current) }
+  }, [actionType, effectiveTarget, mission, sessionId])
+
   function handleSubmit() {
     const params: Record<string, string> = {}
     if (actionType === 'task_assets') params.mission = mission
-    onSubmit({
-      operations: [{
-        action_type: actionType,
-        target_faction: effectiveTarget || undefined,
-        parameters: params,
-        rationale,
-      }],
-    })
+    const forecastPayload = preview ? {
+      action_type: actionType,
+      mission: actionType === 'task_assets' ? mission : '',
+      target_faction_id: effectiveTarget || '',
+      forecast: preview,
+    } : undefined
+    onSubmit(
+      {
+        operations: [{
+          action_type: actionType,
+          target_faction: effectiveTarget || undefined,
+          parameters: params,
+          rationale,
+        }],
+      },
+      forecastPayload,
+    )
   }
 
   return (
@@ -157,6 +233,28 @@ export default function OpsPanel({ factionNames, humanFactionId, asatKinetic, on
           }}
         />
       </div>
+
+      {preview && (
+        <div style={{
+          marginBottom: 12, border: '1px solid rgba(0,212,255,0.2)',
+          borderRadius: 2, padding: '8px 10px', background: 'rgba(0,212,255,0.04)',
+        }}>
+          <div className="panel-title" style={{ fontSize: 11, marginBottom: 6, color: '#00d4ff' }}>
+            ◆ ESTIMATED OUTCOME {previewLoading && <span style={{ color: '#334155' }}>…</span>}
+          </div>
+          {!preview.available ? (
+            <div style={{ color: '#f59e0b', fontSize: 12, fontFamily: 'Courier New' }}>
+              [BLOCKED] {preview.unavailable_reason}
+            </div>
+          ) : preview.effect_summary ? (
+            <div style={{ color: '#94a3b8', fontSize: 12, fontFamily: 'Courier New' }}>
+              {preview.effect_summary}
+            </div>
+          ) : (
+            <PreviewRows preview={preview} />
+          )}
+        </div>
+      )}
 
       <button
         className="btn-primary"

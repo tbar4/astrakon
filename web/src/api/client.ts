@@ -47,12 +47,17 @@ export async function decide(
   sessionId: string,
   phase: string,
   decision: Record<string, unknown>,
+  operationForecast?: Record<string, unknown>,
 ): Promise<GameStateResponse> {
   return json(
     await fetch(`${BASE}/game/${sessionId}/decide`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ phase, decision }),
+      body: JSON.stringify({
+        phase,
+        decision,
+        operation_forecast: operationForecast ?? null,
+      }),
     }),
   )
 }
