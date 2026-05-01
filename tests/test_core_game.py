@@ -177,3 +177,35 @@ def test_clone_idempotent():
     assert clone.current_turn() == g.current_turn()
     assert clone.current_phase() == g.current_phase()
     assert clone.coalition_dominance == g.coalition_dominance
+
+
+# ── Task 10 tests ─────────────────────────────────────────────────────────────
+
+def test_information_state_different_per_faction():
+    g = make_game()
+    is0 = g.information_state_string(0)
+    is1 = g.information_state_string(1)
+    assert is0 != is1
+
+
+def test_information_state_excludes_same_phase_prior_actions():
+    g = make_game()
+    g.apply_action(0, 5)
+    is1 = g.information_state_string(1)
+    assert "invest_prior" not in is1
+    assert "ACT1" in is1
+
+
+def test_information_state_includes_own_assets():
+    g = make_game()
+    is0 = g.information_state_string(0)
+    assert "OWN:" in is0
+    assert "COAL:" in is0
+    assert "ADV:" in is0
+
+
+def test_information_state_deterministic():
+    g = make_game()
+    s1 = g.information_state_string(0)
+    s2 = g.information_state_string(0)
+    assert s1 == s2

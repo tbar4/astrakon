@@ -372,3 +372,60 @@ class CoreGame:
 
     def clone(self) -> "CoreGame":
         return copy.deepcopy(self)
+
+    def information_state_string(self, player_idx: int) -> str:
+        """Deterministic encoding of what player_idx knows.
+
+        Excludes same-phase prior actions of other factions (IS-MCTS invariant).
+        """
+        fid = self.faction_order[player_idx]
+        fs = self.faction_states[fid]
+        a = fs.assets
+
+        lines = [
+            f"IS:{fid}|T{self._turn}/{self._total_turns}|P{self._phase.value}|"
+            f"ACT{self._acting_faction_idx}|ESC{self.escalation_rung}",
+            f"DEB:{self.debris_fields['leo']:.3f}/{self.debris_fields['meo']:.3f}/"
+            f"{self.debris_fields['geo']:.3f}/{self.debris_fields['cislunar']:.3f}",
+            f"OWN:{a.leo_nodes}/{a.meo_nodes}/{a.geo_nodes}/{a.cislunar_nodes}/"
+            f"{a.asat_kinetic}/{a.asat_deniable}/{a.ew_jammers}/{a.sda_sensors}/"
+            f"{a.relay_nodes}/{a.launch_capacity}/{fs.current_budget}",
+            "COAL:" + ",".join(f"{cid}={dom:.4f}" for cid, dom in sorted(self.coalition_dominance.items())),
+        ]
+
+        # Adversary estimates (SDA-filtered, deterministic)
+        adv_lines = []
+        for other_fid, other_fs in self.faction_states.items():
+            if other_fs.coalition_id != fs.coalition_id:
+                est = self._estimate_adversary_assets(fid, other_fid)
+                adv_lines.append(
+                    f"  {other_fid}:{est.leo_nodes}/{est.meo_nodes}/{est.geo_nodes}/"
+                    f"{est.cislunar_nodes}/{est.asat_kinetic}"
+                )
+        if adv_lines:
+            lines.append("ADV:")
+            lines.extend(adv_lines)
+
+        # Ally full state (shared intel)
+        ally_lines = []
+        for other_fid, other_fs in self.faction_states.items():
+            if other_fid != fid and other_fs.coalition_id == fs.coalition_id:
+                oa = other_fs.assets
+                ally_lines.append(
+                    f"  {other_fid}:{oa.leo_nodes}/{oa.meo_nodes}/{oa.geo_nodes}/"
+                    f"{oa.cislunar_nodes}/{oa.asat_kinetic}/{oa.asat_deniable}/"
+                    f"{oa.ew_jammers}/{oa.sda_sensors}/{oa.relay_nodes}/{oa.launch_capacity}"
+                )
+        if ally_lines:
+            lines.append("ALLY:")
+            lines.extend(ally_lines)
+
+        detectable = sum(
+            1 for k in self.pending_kinetics
+            if k.get("target_faction_id") in [fid] + [
+                f for f, s in self.faction_states.items() if s.coalition_id == fs.coalition_id
+            ] and fs.sda_level() >= 0.3
+        )
+        lines.append(f"THREATS:{detectable}")
+
+        return "\n".join(lines)
