@@ -8,8 +8,9 @@ import AARPanel from './AARPanel'
 import HoloOrbitalMap from './HoloOrbitalMap'
 import DeltaVGraph from './DeltaVGraph'
 import TrendsTab from './TrendsTab'
+import TechTreePanel from './TechTreePanel'
 
-type Tab = 'orbital' | 'deltav' | 'ops' | 'trends' | 'aar'
+type Tab = 'orbital' | 'deltav' | 'ops' | 'trends' | 'aar' | 'tech'
 
 interface Props {
   gameState: GameState
@@ -31,6 +32,9 @@ interface Props {
   targetingMode?: boolean
   lockedFaction?: string | null
   onFactionClick?: (factionId: string) => void
+  pendingTechUnlocks?: string[]
+  onQueueTech?: (id: string) => void
+  rdPoints?: number
 }
 
 const TAB_LABELS: { id: Tab; label: string }[] = [
@@ -39,12 +43,14 @@ const TAB_LABELS: { id: Tab; label: string }[] = [
   { id: 'ops',     label: 'OPS' },
   { id: 'trends',  label: 'TRENDS' },
   { id: 'aar',     label: 'AAR' },
+  { id: 'tech',    label: 'TECH' },
 ]
 
 export default function MapTabContainer({
   gameState, coalitionDominance, turnHistory, prevFactionStates, humanAdversaryEstimates,
   factionState, turn, totalTurns, tensionLevel, cumulativeAdded, cumulativeDestroyed, isJammed,
   targetingMode, lockedFaction, onFactionClick,
+  pendingTechUnlocks = [], onQueueTech = () => {}, rdPoints = 0,
 }: Props) {
   const [activeTab, setActiveTab] = useState<Tab>('orbital')
   const [selectedShell, setSelectedShell] = useState<string | null>(null)
@@ -121,6 +127,16 @@ export default function MapTabContainer({
             gameState={gameState}
             coalitionDominance={coalitionDominance}
             turnHistory={turnHistory}
+          />
+        )}
+        {activeTab === 'tech' && (
+          <TechTreePanel
+            gameState={gameState}
+            factionState={gameState.faction_states[gameState.human_faction_id]}
+            currentPhase={gameState.current_phase as string}
+            rdPoints={rdPoints}
+            pendingUnlocks={pendingTechUnlocks}
+            onQueueToggle={onQueueTech}
           />
         )}
       </div>
