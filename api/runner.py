@@ -269,6 +269,7 @@ async def advance(
 
                 elif state.current_phase == Phase.OPERATIONS:
                     state.combat_events = []
+                    referee._combat_events = []
                     await audit.initialize()
                     referee._resolve_pending_deniables(state.turn)
                     await referee.resolve_operations(state.turn, state.phase_decisions)
