@@ -101,8 +101,7 @@ def test_faction_state_archetype_defaults_empty():
         budget_per_turn=100, current_budget=100,
         assets=FactionAssets(),
     )
-    # Task 1 added archetype as Optional[str] = None; None is acceptable here
-    assert fs.archetype is None or fs.archetype == ""
+    assert fs.archetype is None
 
 
 def test_faction_state_has_unlocked_techs():
@@ -124,7 +123,6 @@ def test_faction_state_has_rog_shock_used():
 
 
 def test_decision_has_tech_unlocks():
-    from engine.state import Phase, InvestmentAllocation
     d = Decision(
         phase=Phase.INVEST,
         faction_id="ussf",
@@ -135,7 +133,6 @@ def test_decision_has_tech_unlocks():
 
 
 def test_decision_tech_unlocks_defaults_empty():
-    from engine.state import Phase, InvestmentAllocation
     d = Decision(
         phase=Phase.INVEST,
         faction_id="ussf",
