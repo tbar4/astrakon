@@ -32,7 +32,7 @@ factions:
   - faction_id: eu_galileo
     name: "EU Galileo Consortium"
     archetype: commercial_broker
-    agent_type: ai_commander
+    agent_type: is_mcts
     budget_per_turn: 70
     coalition_id: nato_gps
     coalition_loyalty: 0.7
@@ -46,7 +46,7 @@ factions:
   - faction_id: cnsa_beidou
     name: "CNSA BeiDou Command"
     archetype: gray_zone
-    agent_type: ai_commander
+    agent_type: is_mcts
     budget_per_turn: 90
     coalition_id: sino_gnss
     coalition_loyalty: 0.85
@@ -62,7 +62,7 @@ factions:
   - faction_id: vks_glonass
     name: "VKS GLONASS Forces"
     archetype: rogue_accelerationist
-    agent_type: ai_commander
+    agent_type: is_mcts
     budget_per_turn: 50
     coalition_id: sino_gnss
     coalition_loyalty: 0.65

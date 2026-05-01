@@ -31,7 +31,7 @@ factions:
   - faction_id: nexus_corp
     name: "Nexus Aerospace"
     archetype: commercial_broker
-    agent_type: ai_commander
+    agent_type: is_mcts
     budget_per_turn: 75
     coalition_id: blue
     coalition_loyalty: 0.6
@@ -44,7 +44,7 @@ factions:
   - faction_id: pla_ssf
     name: "PLA Strategic Support Force"
     archetype: gray_zone
-    agent_type: ai_commander
+    agent_type: is_mcts
     budget_per_turn: 90
     coalition_id: red
     coalition_loyalty: 0.85
@@ -60,7 +60,7 @@ factions:
   - faction_id: russia_vks
     name: "VKS Space Forces"
     archetype: rogue_accelerationist
-    agent_type: ai_commander
+    agent_type: is_mcts
     budget_per_turn: 40
     coalition_id: red
     coalition_loyalty: 0.7
