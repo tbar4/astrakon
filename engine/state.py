@@ -105,6 +105,7 @@ class Decision(BaseModel):
     investment: Optional[InvestmentAllocation] = None
     operations: Optional[list[OperationalAction]] = None
     response: Optional[ResponseDecision] = None
+    tech_unlocks: list[str] = []
 
     @model_validator(mode="after")
     def validate_phase_payload(self) -> "Decision":

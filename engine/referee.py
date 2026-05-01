@@ -52,6 +52,7 @@ class GameReferee:
                 assets=f.starting_assets.model_copy(deep=True),
                 coalition_id=f.coalition_id,
                 coalition_loyalty=f.coalition_loyalty,
+                archetype=f.archetype,
             )
             for f in scenario.factions
         }
