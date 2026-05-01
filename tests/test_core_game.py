@@ -81,3 +81,49 @@ def test_legal_actions_ops_phase():
         g.apply_action(i, 0)
     actions = g.legal_actions(0)
     assert all(a >= 100 for a in actions)  # OPS range starts at 100
+
+
+def _full_turn(g: CoreGame, invest_idx: int = 0, ops_idx: int = None, resp_idx: int = 0) -> None:
+    """Submit one complete turn for all factions."""
+    for i in range(4):
+        g.apply_action(i, invest_idx)
+    if ops_idx is None:
+        ops_idx = g._action_space.OPS_OFFSET
+    for i in range(4):
+        g.apply_action(i, ops_idx)
+    for i in range(4):
+        g.apply_action(i, resp_idx + g._action_space.RESPONSE_OFFSET)
+
+
+def test_investment_increases_assets():
+    g = make_game()
+    _full_turn(g, invest_idx=0)
+    assert g.current_turn() == 2
+    total_leo = sum(g.faction_states[fid].assets.leo_nodes for fid in g.faction_order)
+    total_meo = sum(g.faction_states[fid].assets.meo_nodes for fid in g.faction_order)
+    assert total_leo + total_meo > sum(
+        SCENARIO.factions[i].starting_assets.leo_nodes + SCENARIO.factions[i].starting_assets.meo_nodes
+        for i in range(4)
+    )
+
+
+def test_pending_kinetics_resolve_next_turn():
+    g = make_game()
+    _full_turn(g, invest_idx=0)
+    g.pending_kinetics.append({
+        "attacker_id": "pla_ssf",
+        "target_faction_id": "ussf",
+        "shell": "leo",
+        "power": 3,
+    })
+    ussf_leo_before = g.faction_states["ussf"].assets.leo_nodes
+    _full_turn(g, invest_idx=0)
+    ussf_leo_after = g.faction_states["ussf"].assets.leo_nodes
+    assert ussf_leo_after <= ussf_leo_before
+
+
+def test_turn_advances_to_total():
+    g = make_game()
+    for _ in range(14):
+        _full_turn(g, invest_idx=0)
+    assert g.is_terminal()

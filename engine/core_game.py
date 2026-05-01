@@ -165,11 +165,191 @@ class CoreGame:
                 self._resolve_turn()
 
     def _resolve_turn(self) -> None:
-        """Stub — filled in Task 8. Clears decisions, advances turn."""
+        """Resolve a complete turn: kinetics, investment, ops, response, maintenance."""
+
+        asp = self._action_space
+        inv_res = self._sim.investment_resolver
+        conflict_res = self._sim.conflict_resolver
+        debris_eng = self._debris_engine
+        maneuver_eng = self._maneuver_engine
+
+        # ── Step 1: clear combat log ──────────────────────────────────────────
+        self.combat_events = []
+
+        # ── Step 2: resolve pending kinetics from prior turn ──────────────────
+        # pending_kinetics entries: {attacker_id, target_faction_id, shell, power}
+        resolved_kinetics: list[dict] = self.pending_kinetics
+        self.pending_kinetics = []
+
+        for k in resolved_kinetics:
+            attacker_id = k["attacker_id"]
+            target_id = k["target_faction_id"]
+            if attacker_id not in self.faction_states or target_id not in self.faction_states:
+                continue
+            attacker_fs = self.faction_states[attacker_id]
+            target_fs = self.faction_states[target_id]
+            result = conflict_res.resolve_kinetic_asat(
+                attacker_assets=attacker_fs.assets,
+                target_assets=target_fs.assets,
+                attacker_sda_level=attacker_fs.sda_level(),
+            )
+            nodes_destroyed = result["nodes_destroyed"]
+            regime = result.get("regime", k.get("shell", "leo"))
+
+            if nodes_destroyed > 0:
+                # Deduct nodes from the targeted regime
+                attr_map = {
+                    "leo": "leo_nodes", "meo": "meo_nodes",
+                    "geo": "geo_nodes", "cislunar": "cislunar_nodes",
+                }
+                attr = attr_map.get(regime, "leo_nodes")
+                current = getattr(target_fs.assets, attr)
+                setattr(target_fs.assets, attr, max(0, current - nodes_destroyed))
+
+                # Add debris proportional to nodes destroyed
+                debris_amount = nodes_destroyed * debris_eng.DEBRIS_PER_NODE_KINETIC
+                self.debris_fields = debris_eng.add_debris(self.debris_fields, regime, debris_amount)
+
+            self.combat_events.append(CombatEvent(
+                turn=self._turn,
+                attacker_id=attacker_id,
+                target_faction_id=target_id,
+                shell=regime,
+                event_type="kinetic",
+                nodes_destroyed=nodes_destroyed,
+                detail=f"Kinetic ASAT: {nodes_destroyed} nodes destroyed in {regime}",
+                detected=result.get("detected", False),
+                attributed=result.get("attributed", False),
+            ))
+
+        # ── Step 3: apply INVEST decisions ────────────────────────────────────
+        for faction_idx, action_idx in self._invest_decisions.items():
+            fid = self.faction_order[faction_idx]
+            fs = self.faction_states[fid]
+            alloc, _name = asp.invest_portfolios[action_idx]
+            result = inv_res.resolve(
+                faction_id=fid,
+                budget=fs.budget_per_turn,
+                allocation=alloc,
+                turn=self._turn,
+                unlocked_techs=fs.unlocked_techs,
+                partial_invest=fs.partial_invest,
+            )
+            # Apply immediate asset gains
+            ia = result.immediate_assets
+            fs.assets.leo_nodes += ia.leo_nodes
+            fs.assets.meo_nodes += ia.meo_nodes
+            fs.assets.geo_nodes += ia.geo_nodes
+            fs.assets.cislunar_nodes += ia.cislunar_nodes
+            fs.assets.launch_capacity += ia.launch_capacity
+            fs.assets.asat_kinetic += ia.asat_kinetic
+            fs.assets.asat_deniable += ia.asat_deniable
+            fs.assets.ew_jammers += ia.ew_jammers
+
+            # Bank partial remainder for next turn
+            fs.partial_invest = result.partial_invest_out
+
+            # Queue deferred returns on faction state
+            fs.deferred_returns.extend(result.deferred_returns)
+
+        # Process deferred returns that mature this turn
+        for fid, fs in self.faction_states.items():
+            matured = [d for d in fs.deferred_returns if d.get("turn_due") == self._turn]
+            remaining = [d for d in fs.deferred_returns if d.get("turn_due") != self._turn]
+            fs.deferred_returns = remaining
+            for d in matured:
+                category = d.get("category", "")
+                amount = d.get("amount", 0)
+                if category == "commercial_income":
+                    # Convert income to budget (credited next turn via budget_per_turn proxy)
+                    # For now add LEO nodes proportional to income as a simple proxy
+                    fs.assets.leo_nodes += amount // 5
+                elif category == "r_and_d":
+                    # R&D yields SDA sensor improvements
+                    fs.assets.sda_sensors += amount // 20
+                elif category == "education":
+                    # Education yields launch capacity
+                    fs.assets.launch_capacity += amount // 30
+
+        # ── Step 4: apply OPS decisions ───────────────────────────────────────
+        for faction_idx, action_idx in self._ops_decisions.items():
+            fid = self.faction_order[faction_idx]
+            fs = self.faction_states[fid]
+            ops = asp.ops_action_from_index(action_idx)
+            action_type = ops.get("action_type", "")
+            target_id = ops.get("target_faction_id")
+            mission = ops.get("mission", "")
+
+            if action_type == "task_assets" and mission == "intercept" and target_id:
+                # Queue kinetic ASAT intercept for resolution next turn
+                if fs.assets.asat_kinetic > 0 and target_id in self.faction_states:
+                    self.pending_kinetics.append({
+                        "attacker_id": fid,
+                        "target_faction_id": target_id,
+                        "shell": "leo",
+                        "power": fs.assets.asat_kinetic,
+                    })
+
+            elif action_type == "gray_zone" and target_id:
+                # Deniable effect: immediate small node disruption
+                if target_id in self.faction_states and (
+                    fs.assets.asat_deniable > 0 or fs.assets.ew_jammers > 0
+                ):
+                    target_fs = self.faction_states[target_id]
+                    result = conflict_res.resolve_deniable_asat(
+                        attacker_assets=fs.assets,
+                        defender_sda_level=target_fs.sda_level(),
+                    )
+                    nodes_destroyed = result["nodes_destroyed"]
+                    if nodes_destroyed > 0 and target_fs.assets.leo_nodes > 0:
+                        target_fs.assets.leo_nodes = max(
+                            0, target_fs.assets.leo_nodes - nodes_destroyed
+                        )
+                        debris_amount = nodes_destroyed * debris_eng.DEBRIS_PER_NODE_DENIABLE
+                        self.debris_fields = debris_eng.add_debris(
+                            self.debris_fields, "leo", debris_amount
+                        )
+                    self.combat_events.append(CombatEvent(
+                        turn=self._turn,
+                        attacker_id=fid,
+                        target_faction_id=target_id,
+                        shell="leo",
+                        event_type="gray_zone",
+                        nodes_destroyed=nodes_destroyed,
+                        detail=f"Gray-zone deniable: {nodes_destroyed} nodes disrupted",
+                        detected=result.get("detected", False),
+                        attributed=result.get("attributed", False),
+                    ))
+
+        # ── Step 5: apply RESPONSE decisions ──────────────────────────────────
+        for faction_idx, action_idx in self._response_decisions.items():
+            resp = asp.response_action_from_index(action_idx)
+            if resp.get("escalate"):
+                self.escalation_rung = min(self.escalation_rung + 1, 5)
+
+        # ── Step 6: replenish maneuver budgets ────────────────────────────────
+        for fs in self.faction_states.values():
+            maneuver_eng.replenish(fs)
+
+        # ── Step 7: decay debris ──────────────────────────────────────────────
+        self.debris_fields = debris_eng.decay(self.debris_fields)
+
+        # ── Step 8: recompute dominance ───────────────────────────────────────
+        self._recompute_dominance()
+
+        # ── Step 9: check victory condition ───────────────────────────────────
+        for cid, dominance in self.coalition_dominance.items():
+            if dominance >= self._victory_threshold:
+                self._winner_coalition = cid
+                break
+
+        # ── Step 10: clear decisions, advance turn, reset phase ───────────────
         self._invest_decisions = {}
         self._ops_decisions = {}
         self._response_decisions = {}
         self._turn += 1
         self._phase = Phase.INVEST
-        if self._turn > self._total_turns:
+
+        # ── Step 11: check draw condition ─────────────────────────────────────
+        if self._turn > self._total_turns and self._winner_coalition is None:
             self._draw = True
