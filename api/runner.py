@@ -391,4 +391,3 @@ def _replenish_budgets(state: GameState, scenario: Scenario) -> None:
         # Passive tech budget bonuses
         mods = apply_passive_effects(fs, "budget_replenish")
         fs.current_budget += mods["budget_bonus"]
-        fs.assets.launch_capacity += mods["launch_capacity_bonus"]

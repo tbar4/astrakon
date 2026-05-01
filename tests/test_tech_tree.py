@@ -91,13 +91,14 @@ def test_apply_passive_effects_budget_replenish_trunk_budget(mahanian_state):
     mahanian_state.unlocked_techs = ["trunk_budget"]
     result = apply_passive_effects(mahanian_state, "budget_replenish")
     assert result["budget_bonus"] == 8
-    assert result["launch_capacity_bonus"] == 0
 
 
 def test_apply_passive_effects_budget_replenish_trunk_capacity(mahanian_state):
+    # trunk_capacity is a one-time unlock effect, not a per-turn passive
+    # budget_replenish no longer returns launch_capacity_bonus
     mahanian_state.unlocked_techs = ["trunk_capacity"]
     result = apply_passive_effects(mahanian_state, "budget_replenish")
-    assert result["launch_capacity_bonus"] == 1
+    assert result["budget_bonus"] == 0  # trunk_capacity gives no budget bonus
 
 
 def test_apply_passive_effects_budget_replenish_com_revenue(mahanian_state):

@@ -236,7 +236,6 @@ class GameReferee:
             # Passive tech budget bonuses
             mods = apply_passive_effects(fs, "budget_replenish")
             fs.current_budget += mods["budget_bonus"]
-            fs.assets.launch_capacity += mods["launch_capacity_bonus"]
         for fs in self.faction_states.values():
             self.sim.maneuver_budget_engine.replenish(fs)
         self._debris_fields = self.sim.debris_engine.decay(self._debris_fields)
@@ -378,8 +377,7 @@ class GameReferee:
 
     async def resolve_investment(self, turn: int, decisions: dict) -> None:
         """Resolve investment decisions (dict values may be Decision objects or JSON strings)."""
-        from engine.tech_tree import TECH_NODES, _prereqs_met
-        _node_by_id = {n.id: n for n in TECH_NODES}
+        from engine.tech_tree import NODE_BY_ID, prereqs_met
         # Apply debris disruption at start of invest phase
         self.faction_states, debris_log = self.sim.debris_engine.apply_debris_effects(
             self.faction_states, self._debris_fields
@@ -409,7 +407,7 @@ class GameReferee:
             # Process tech unlocks
             for node_id in decision.tech_unlocks:
                 fs = self.faction_states[fid]
-                node = _node_by_id.get(node_id)
+                node = NODE_BY_ID.get(node_id)
                 if node is None:
                     continue
                 if node_id in fs.unlocked_techs:
@@ -426,13 +424,16 @@ class GameReferee:
                         f"({rd_available}/{node.cost} pts)"
                     )
                     continue
-                if not _prereqs_met(node, fs.unlocked_techs):
+                if not prereqs_met(node, fs.unlocked_techs):
                     self._turn_log.append(
                         f"[TECH] {fs.name} rejected unlock {node_id} — prereqs not met"
                     )
                     continue
                 fs.tech_tree["r_and_d"] = rd_available - node.cost
                 fs.unlocked_techs.append(node_id)
+                # Apply one-time launch_capacity bonus for trunk_capacity
+                if node_id == "trunk_capacity":
+                    fs.assets.launch_capacity += 1
                 self._turn_log.append(
                     f"[TECH] {fs.name} unlocked {node.name} (−{node.cost} R&D pts)"
                 )
@@ -678,6 +679,10 @@ class GameReferee:
                         self._prev_turn_ops.append("gray_zone")
                         jamming_mods = apply_passive_effects(fs, "jamming_radius")
                         sda_malus = 0.30 if jamming_mods["extend_to_adjacent"] else 0.15
+                        if target_fid:
+                            self._event_sda_malus[target_fid] = (
+                                self._event_sda_malus.get(target_fid, 0.0) + sda_malus
+                            )
                         self._turn_log.append(f"{fs.name} EW jamming ops against {target_fs.name}")
                     else:
                         self._prev_turn_ops.append("gray_zone")

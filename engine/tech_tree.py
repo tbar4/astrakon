@@ -144,10 +144,10 @@ TECH_NODES: list[TechNode] = [
     ),
 ]
 
-_NODE_BY_ID: dict[str, TechNode] = {n.id: n for n in TECH_NODES}
+NODE_BY_ID: dict[str, TechNode] = {n.id: n for n in TECH_NODES}
 
 
-def _prereqs_met(node: TechNode, unlocked: list[str]) -> bool:
+def prereqs_met(node: TechNode, unlocked: list[str]) -> bool:
     has_any_trunk = any(tid in unlocked for tid in TRUNK_IDS)
     for p in node.prereqs:
         if p == "_any_trunk":
@@ -170,7 +170,7 @@ def get_available_nodes(faction_state: "FactionState", rd_points: int) -> list[T
             continue
         if rd_points < node.cost:
             continue
-        if not _prereqs_met(node, unlocked):
+        if not prereqs_met(node, unlocked):
             continue
         result.append(node)
     return result
@@ -209,10 +209,7 @@ def apply_passive_effects(faction_state: "FactionState", context: str) -> dict:
                 + faction_state.assets.geo_nodes + faction_state.assets.cislunar_nodes
             )
             budget_bonus += int(min(total_nodes * 0.5, 20))
-        return {
-            "budget_bonus": budget_bonus,
-            "launch_capacity_bonus": 1 if "trunk_capacity" in unlocked else 0,
-        }
+        return {"budget_bonus": budget_bonus}
 
     if context == "asat_kinetic":
         return {
