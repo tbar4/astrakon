@@ -1,5 +1,5 @@
 // web/src/components/TurnSummary.tsx
-import type { GameState } from '../types'
+import type { GameState, CombatEvent } from '../types'
 
 interface Props {
   gameState: GameState
@@ -37,6 +37,36 @@ export default function TurnSummary({ gameState, coalitionDominance, onContinue 
                 <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>{ev.description}</div>
               </div>
             ))}
+          </div>
+        )}
+
+        {gameState.combat_events && gameState.combat_events.length > 0 && (
+          <div className="panel" style={{ borderColor: 'rgba(255,68,153,0.3)' }}>
+            <div className="panel-title" style={{ color: '#ff4499' }}>◆ STRIKES THIS TURN</div>
+            {gameState.combat_events.map((ev: CombatEvent, i: number) => {
+              const isKinetic = ev.event_type === 'kinetic'
+              const color = isKinetic ? '#ff4499' : '#f59e0b'
+              const arrow = isKinetic ? '→' : '⤳'
+              const shellLabel = ev.shell.toUpperCase()
+              const typeLabel = ev.event_type.replace(/_/g, ' ').toUpperCase()
+              const attackerName = gameState.faction_states[ev.attacker_id]?.name ?? ev.attacker_id
+              const targetName = gameState.faction_states[ev.target_faction_id]?.name ?? ev.target_faction_id
+              return (
+                <div key={i} className="mono" style={{
+                  fontSize: 10, color, marginBottom: 4,
+                  display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap',
+                }}>
+                  <span>{attackerName}</span>
+                  <span>{arrow}</span>
+                  <span>{targetName}</span>
+                  <span style={{ opacity: 0.7 }}>[{shellLabel}]</span>
+                  <span style={{ opacity: 0.7 }}>[{typeLabel}]</span>
+                  {ev.nodes_destroyed > 0 && (
+                    <span>−{ev.nodes_destroyed} NODES</span>
+                  )}
+                </div>
+              )
+            })}
           </div>
         )}
 
