@@ -353,7 +353,7 @@ async def test_tech_unlock_insufficient_rd_rejected(tmp_path, minimal_scenario):
 
 
 @pytest.mark.asyncio
-async def test_mah_escalation_adds_asat_when_struck(tmp_path, minimal_scenario):
+async def test_kin_intercept_k_adds_asat_when_struck(tmp_path, minimal_scenario):
     from output.audit import AuditTrail
     from engine.referee import GameReferee
     from agents.rule_based import MahanianAgent
@@ -368,8 +368,8 @@ async def test_mah_escalation_adds_asat_when_struck(tmp_path, minimal_scenario):
     target_fid = minimal_scenario.factions[1].faction_id
     ref.faction_states[attacker_fid].assets.asat_kinetic = 2
     ref.faction_states[attacker_fid].assets.leo_nodes = 5
-    # Give target mah_escalation
-    ref.faction_states[target_fid].unlocked_techs = ["mah_escalation"]
+    # Give target kin_intercept_k (emergency procurement on being struck)
+    ref.faction_states[target_fid].unlocked_techs = ["kin_intercept_k"]
     ref.faction_states[target_fid].assets.leo_nodes = 20
     initial_asat = ref.faction_states[target_fid].assets.asat_kinetic
 
@@ -380,5 +380,5 @@ async def test_mah_escalation_adds_asat_when_struck(tmp_path, minimal_scenario):
         "approach_type": "kinetic",
     }
     ref._resolve_kinetic_approach(approach)
-    # mah_escalation should have added +1 to target's asat_kinetic
+    # kin_intercept_k should have added +1 to target's asat_kinetic
     assert ref.faction_states[target_fid].assets.asat_kinetic == initial_asat + 1

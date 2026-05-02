@@ -160,12 +160,12 @@ def test_trunk_launch_reduces_leo_cost_divisor():
     assert result_tech.immediate_assets.leo_nodes == 25  # 100 // 4
 
 
-def test_mah_projection_boosts_geo_nodes():
+def test_nk_power_projection_boosts_geo_nodes():
     resolver = InvestmentResolver()
     alloc = InvestmentAllocation(geo_deployment=1.0, rationale="test")
     result_default = resolver.resolve("ussf", 100, alloc, 1, unlocked_techs=[])
     assert result_default.immediate_assets.geo_nodes == 4  # 100 // 25
-    result_tech = resolver.resolve("ussf", 100, alloc, 1, unlocked_techs=["mah_projection"])
+    result_tech = resolver.resolve("ussf", 100, alloc, 1, unlocked_techs=["nk_power_projection"])
     assert result_tech.immediate_assets.geo_nodes == 5  # int(100*1.25)=125 // 25
 
 
@@ -187,7 +187,7 @@ def test_commercial_income_default_multiplier():
     assert commercial_deferred[0]["amount"] == 50  # 50 * 1.0
 
 
-def test_gz_masking_hides_asat_deniable():
+def test_ew_signature_mask_hides_asat_deniable():
     sda = SDAFilter()
     adversary = FactionAssets(leo_nodes=20, asat_deniable=5)
     result = sda.filter(adversary, observer_sda_level=0.9)
@@ -198,7 +198,7 @@ def test_gz_masking_hides_asat_deniable():
     assert result_masked.asat_deniable == 0
 
 
-def test_gz_ghost_reduces_visible_leo_nodes():
+def test_ew_signature_mask_reduces_visible_leo_nodes():
     sda = SDAFilter()
     adversary = FactionAssets(leo_nodes=20)
     result_normal = sda.filter(adversary, observer_sda_level=1.0)
@@ -208,7 +208,7 @@ def test_gz_ghost_reduces_visible_leo_nodes():
     assert result_ghost.leo_nodes == int(result_normal.leo_nodes * 0.75)
 
 
-def test_mah_strike_adds_nodes_destroyed_bonus():
+def test_kin_da_asat_adds_nodes_destroyed_bonus():
     resolver = ConflictResolver()
     attacker = FactionAssets(asat_kinetic=1, sda_sensors=24)
     target = FactionAssets(leo_nodes=50)
@@ -220,7 +220,7 @@ def test_mah_strike_adds_nodes_destroyed_bonus():
     assert result_strike["nodes_destroyed"] == result_default["nodes_destroyed"] + 1
 
 
-def test_rog_cascade_immune_faction_skips_adjacent_shell_damage():
+def test_kin_cascade_doctrine_immune_faction_skips_adjacent_shell_damage():
     import random as _random
     from engine.simulation import DebrisEngine
     engine = DebrisEngine()

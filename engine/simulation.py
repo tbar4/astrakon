@@ -198,7 +198,8 @@ class SDAFilter:
 class ConflictResolver:
     def resolve_kinetic_asat(
         self, attacker_assets: FactionAssets, target_assets: FactionAssets,
-        attacker_sda_level: float, attacker_tech_mods: dict | None = None
+        attacker_sda_level: float, attacker_tech_mods: dict | None = None,
+        intercept_accuracy_penalty: float = 0.0,
     ) -> dict:
         if attacker_assets.asat_kinetic == 0:
             return {"nodes_destroyed": 0, "regime": "none", "detected": False, "attributed": False}
@@ -219,7 +220,9 @@ class ConflictResolver:
         else:
             return {"nodes_destroyed": 0, "regime": "none", "detected": True, "attributed": True}
 
-        nodes_destroyed = int(effectiveness * attacker_sda_level)
+        # ew_spoofing: target's GPS spoofing reduces effective attacker SDA for hit calculation
+        effective_sda = max(0.0, attacker_sda_level - intercept_accuracy_penalty)
+        nodes_destroyed = int(effectiveness * effective_sda)
         if attacker_tech_mods:
             nodes_destroyed += attacker_tech_mods.get("nodes_destroyed_bonus", 0)
         # Deterministic detected/attributed: use fixed thresholds based on SDA level

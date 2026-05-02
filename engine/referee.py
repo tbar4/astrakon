@@ -392,7 +392,7 @@ class GameReferee:
         }
         cascade_immune = {
             fid for fid, fs in self.faction_states.items()
-            if "rog_cascade" in fs.unlocked_techs
+            if "kin_cascade_doctrine" in fs.unlocked_techs
         }
         self.faction_states, debris_log = self.sim.debris_engine.apply_debris_effects(
             self.faction_states, self._debris_fields,
@@ -432,16 +432,13 @@ class GameReferee:
                     continue
                 if node_id in fs.unlocked_techs:
                     continue  # guard prevents double-apply of one-time effects (e.g. trunk_capacity)
-                if node.archetype is not None and node.archetype != fs.archetype:
-                    self._turn_log.append(
-                        f"[TECH] {fs.name} rejected unlock {node_id} — archetype mismatch"
-                    )
-                    continue
+                from engine.tech_tree import effective_cost
+                cost = effective_cost(node, fs.archetype)
                 rd_available = fs.tech_tree.get("r_and_d", 0)
-                if rd_available < node.cost:
+                if rd_available < cost:
                     self._turn_log.append(
                         f"[TECH] {fs.name} rejected unlock {node_id} — insufficient R&D "
-                        f"({rd_available}/{node.cost} pts)"
+                        f"({rd_available}/{cost} pts)"
                     )
                     continue
                 if not prereqs_met(node, fs.unlocked_techs):
@@ -449,13 +446,16 @@ class GameReferee:
                         f"[TECH] {fs.name} rejected unlock {node_id} — prereqs not met"
                     )
                     continue
-                fs.tech_tree["r_and_d"] = rd_available - node.cost
+                fs.tech_tree["r_and_d"] = rd_available - cost
                 fs.unlocked_techs.append(node_id)
-                # Apply one-time launch_capacity bonus for trunk_capacity
+                # Apply one-time effects on unlock
                 if node_id == "trunk_capacity":
                     fs.assets.launch_capacity += 1
+                if node_id == "trunk_sda":
+                    fs.assets.sda_sensors += 4
+                discount_note = " (−1 archetype discount)" if cost < node.cost else ""
                 self._turn_log.append(
-                    f"[TECH] {fs.name} unlocked {node.name} (−{node.cost} R&D pts)"
+                    f"[TECH] {fs.name} unlocked {node.name} (−{cost} R&D pts{discount_note})"
                 )
             await self.audit.write_decision(turn=turn, decision=decision)
 
@@ -476,11 +476,13 @@ class GameReferee:
             return
 
         attacker_mods = apply_passive_effects(attacker_fs, "asat_kinetic")
+        spoofing_mods = apply_passive_effects(target_fs, "ew_spoofing")
         result = self.sim.conflict_resolver.resolve_kinetic_asat(
             attacker_assets=attacker_fs.assets,
             target_assets=target_fs.assets,
             attacker_sda_level=attacker_fs.sda_level(),
             attacker_tech_mods=attacker_mods,
+            intercept_accuracy_penalty=spoofing_mods["intercept_accuracy_penalty"],
         )
         regime = result.get("regime", "leo")
         nodes_hit = 0
@@ -518,8 +520,8 @@ class GameReferee:
         self._prev_turn_ops.append("kinetic_strike")
         attacker_fs.disruption_score += nodes_hit * 5
 
-        # mah_escalation: target gains +1 ASAT kinetic (emergency procurement)
-        if "mah_escalation" in target_fs.unlocked_techs:
+        # kin_intercept_k: target gains +1 ASAT kinetic (emergency procurement)
+        if "kin_intercept_k" in target_fs.unlocked_techs:
             target_fs.assets.asat_kinetic += 1
             self._turn_log.append(
                 f"[TECH] {target_fs.name} emergency procurement: +1 ASAT kinetic "
@@ -561,7 +563,10 @@ class GameReferee:
                 attacker_assets=attacker_fs.assets,
                 defender_sda_level=target_fs.sda_level(),
             )
-            nodes_hit = min(result["nodes_destroyed"], target_fs.assets.leo_nodes)
+            from engine.tech_tree import apply_passive_effects
+            resilience = apply_passive_effects(target_fs, "resilience")["damage_reduction"]
+            raw_hit = result["nodes_destroyed"]
+            nodes_hit = min(max(0, raw_hit - resilience), target_fs.assets.leo_nodes)
             target_fs.assets.leo_nodes -= nodes_hit
             attacker_fs.assets.asat_deniable -= 1
             self._debris_fields = self.sim.debris_engine.add_debris(
@@ -657,7 +662,7 @@ class GameReferee:
                                     "target_fid": target_fid,
                                     "declared_turn": turn,
                                     "approach_type": "kinetic",
-                                    "rog_ascent": "rog_ascent" in fs.unlocked_techs,
+                                    "rapid_ascent": "kin_rapid_ascent" in fs.unlocked_techs,
                                 })
                                 self._escalation_rung = max(self._escalation_rung, 3)
                                 self._turn_log.append(
@@ -785,7 +790,7 @@ class GameReferee:
     def resolve_pending_kinetics(self, turn: int) -> None:
         """Resolve kinetic approaches with 2-turn transit (declared N, resolves at N+2).
 
-        Called at the start of INVEST phase (after resolve_investment). rog_ascent approaches
+        Called at the start of INVEST phase (after resolve_investment). kin_rapid_ascent approaches
         are declared during OPERATIONS and removed during resolve_response of the same turn,
         so they will never appear here with declared_turn == turn - 2 for that turn.
         """
@@ -941,10 +946,10 @@ class GameReferee:
                 if fs and fs.coalition_id:
                     fs.coalition_loyalty = min(1.0, fs.coalition_loyalty + 0.02)
 
-        # rog_ascent: resolve same-turn kinetic approaches at end of RESPONSE phase
+        # kin_rapid_ascent: resolve same-turn kinetic approaches at end of RESPONSE phase
         rog_ascent_approaches = [
             a for a in self._pending_kinetic_approaches
-            if a.get("rog_ascent") and a["declared_turn"] == turn
+            if a.get("rapid_ascent") and a["declared_turn"] == turn
         ]
         for approach in rog_ascent_approaches:
             self._resolve_kinetic_approach(approach)
@@ -973,8 +978,8 @@ class GameReferee:
                 fs.sda_level() * 50 +
                 (20.0 if fs.coalition_id else 0.0)
             )
-            # mah_deterrence: +15 deterrence score/turn
-            if "mah_deterrence" in fs.unlocked_techs:
+            # kin_deterrence: +15 deterrence score/turn
+            if "kin_deterrence" in fs.unlocked_techs:
                 fs.deterrence_score = min(100.0, fs.deterrence_score + 15)
 
             # Market share: this faction's LEO nodes as fraction of total (com_network includes MEO)
