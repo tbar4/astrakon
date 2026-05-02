@@ -33,7 +33,7 @@ factions:
   - faction_id: esa_consortium
     name: "ESA Commercial Consortium"
     archetype: commercial_broker
-    agent_type: ai_commander
+    agent_type: is_mcts
     budget_per_turn: 80
     coalition_id: artemis
     coalition_loyalty: 0.65
@@ -48,7 +48,7 @@ factions:
   - faction_id: cnsa_pla
     name: "CNSA/PLA Cislunar Command"
     archetype: gray_zone
-    agent_type: ai_commander
+    agent_type: is_mcts
     budget_per_turn: 100
     coalition_id: ascent
     coalition_loyalty: 0.9
@@ -65,7 +65,7 @@ factions:
   - faction_id: roscosmos
     name: "Roscosmos Space Forces"
     archetype: rogue_accelerationist
-    agent_type: ai_commander
+    agent_type: is_mcts
     budget_per_turn: 35
     coalition_id: ascent
     coalition_loyalty: 0.55
